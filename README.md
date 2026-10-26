@@ -180,21 +180,20 @@ This will automatically create:
 
 ## ☁️ Deploying to Vercel (Free Tier)
 
-1. Push your repository to GitHub:
-   ```bash
-   git remote add origin https://github.com/<your-username>/<your-repo-name>.git
-   git push -u origin main
-   ```
+This project is configured and ready for 1-click deployment on Vercel:
+
+1. **Repository**: [https://github.com/dohadwalahamza-ai/event-registration-platform](https://github.com/dohadwalahamza-ai/event-registration-platform)
 2. Log in to [vercel.com](https://vercel.com) and click **Add New Project**.
-3. Import your GitHub repository.
-4. Set Build Command: `npm run build`
-5. Set Output Directory: `dist`
-6. Add Environment Variables (optional, if using Supabase):
+3. Import the `dohadwalahamza-ai/event-registration-platform` repository.
+4. Framework Preset: **Vite**
+5. Build Command: `npm run build`
+6. Output Directory: `dist`
+7. Add Environment Variables (optional, if using Supabase):
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-7. Click **Deploy**. Vercel will provide your live deployment URL (e.g., `https://event-form-platform.vercel.app`).
-8. Public event registration links will be accessible at:
-   `https://event-form-platform.vercel.app/#/e/kpcl-season-5`
+8. Click **Deploy**. Vercel will provide your live deployment URL (e.g., `https://event-registration-platform.vercel.app`).
+9. Public event registration links will be accessible at:
+   `https://event-registration-platform.vercel.app/#/e/kpcl-season-5`
 
 ---
 
