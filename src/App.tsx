@@ -32,6 +32,8 @@ function AppContent() {
 
   // Check URL hash for public page routes and admin deep linking
   const [publicSlug, setPublicSlug] = useState<string | null>(null);
+  const [publicForm, setPublicForm] = useState<Form | null>(null);
+  const [isPublicLoading, setIsPublicLoading] = useState(false);
   const [isLoginRoute, setIsLoginRoute] = useState(false);
   const { success, error } = useToast();
 
@@ -41,9 +43,11 @@ function AppContent() {
 
     let slug: string | null = null;
     if (hash.startsWith('#/e/')) {
-      slug = hash.replace('#/e/', '').split('?')[0];
+      const raw = hash.replace('#/e/', '').split('?')[0];
+      slug = decodeURIComponent(raw).replace(/\/+$/, '');
     } else if (path.startsWith('/e/')) {
-      slug = path.replace('/e/', '').split('?')[0];
+      const raw = path.replace('/e/', '').split('?')[0];
+      slug = decodeURIComponent(raw).replace(/\/+$/, '');
     }
     setPublicSlug(slug);
 
@@ -126,6 +130,36 @@ function AppContent() {
     loadData();
   }, []);
 
+  // Dedicated loader for public event registration pages
+  useEffect(() => {
+    if (!publicSlug) {
+      setPublicForm(null);
+      setIsPublicLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsPublicLoading(true);
+
+    StorageService.getFormBySlug(publicSlug)
+      .then((form) => {
+        if (!isCancelled) {
+          setPublicForm(form);
+          setIsPublicLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching public form:', err);
+        if (!isCancelled) {
+          setIsPublicLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [publicSlug]);
+
   // Compute response counts per form
   const responseCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -145,7 +179,7 @@ function AppContent() {
       title: `New Event Registration Form ${count}`,
       slug: `event-form-${Date.now().toString(36)}`,
       description: 'Fill out this form to register for the upcoming event.',
-      status: 'draft',
+      status: 'published',
       theme_config: {
         accentColor: '#4f46e5',
         headerStyle: 'banner',
@@ -249,9 +283,21 @@ function AppContent() {
 
   // 1. PUBLIC REGISTRATION ROUTE (Accessible without login)
   if (publicSlug) {
-    const publicForm = forms.find((f) => f.slug.toLowerCase() === publicSlug.toLowerCase());
+    if (isPublicLoading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+            <span className="text-xs font-semibold text-slate-500">Loading Event Registration Form...</span>
+          </div>
+        </div>
+      );
+    }
 
-    if (!publicForm) {
+    // Use loaded publicForm, or fallback to in-memory forms list
+    const formToRender = publicForm || forms.find((f) => f.slug.toLowerCase() === publicSlug.toLowerCase());
+
+    if (!formToRender) {
       return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 text-center">
           <div className="max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-md space-y-4">
@@ -264,7 +310,7 @@ function AppContent() {
                 window.location.hash = '';
                 setPublicSlug(null);
               }}
-              className="text-xs font-semibold text-indigo-600 hover:underline"
+              className="text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
             >
               Return to Platform Home
             </button>
@@ -273,7 +319,7 @@ function AppContent() {
       );
     }
 
-    return <PublicRegistrationPage form={publicForm} />;
+    return <PublicRegistrationPage form={formToRender} />;
   }
 
   // 2. LOADING STATE
