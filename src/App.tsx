@@ -27,7 +27,7 @@ function AppContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
 
-  // Check URL hash for public page routes, e.g. #/e/kpcl-season-5
+  // Check URL hash for public page routes and admin deep linking
   const [publicSlug, setPublicSlug] = useState<string | null>(null);
   const { success, error } = useToast();
 
@@ -42,6 +42,36 @@ function AppContent() {
       slug = path.replace('/e/', '').split('?')[0];
     }
     setPublicSlug(slug);
+
+    if (!slug) {
+      if (hash.startsWith('#/forms')) {
+        setCurrentTab('forms');
+      } else if (hash.startsWith('#/builder')) {
+        const parts = hash.split('/');
+        if (parts[2]) setActiveFormId(parts[2]);
+        setCurrentTab('new-form');
+      } else if (hash.startsWith('#/responses')) {
+        const parts = hash.split('/');
+        if (parts[2]) setActiveFormId(parts[2]);
+        setCurrentTab('responses');
+      } else if (hash.startsWith('#/settings')) {
+        setCurrentTab('settings');
+      } else if (hash === '' || hash === '#' || hash.startsWith('#/dashboard')) {
+        setCurrentTab('dashboard');
+      }
+    }
+  };
+
+  const navigateToTab = (tab: NavigationTab, formId?: string) => {
+    setCurrentTab(tab);
+    setPublicSlug(null);
+    if (formId) setActiveFormId(formId);
+
+    if (tab === 'dashboard') window.location.hash = '#/dashboard';
+    else if (tab === 'forms') window.location.hash = '#/forms';
+    else if (tab === 'new-form') window.location.hash = formId ? `#/builder/${formId}` : '#/builder';
+    else if (tab === 'responses') window.location.hash = formId ? `#/responses/${formId}` : '#/responses';
+    else if (tab === 'settings') window.location.hash = '#/settings';
   };
 
   useEffect(() => {
@@ -269,14 +299,14 @@ function AppContent() {
         if (tab === 'new-form') {
           handleCreateNewForm();
         } else {
-          setCurrentTab(tab);
+          navigateToTab(tab);
         }
       }}
       onCreateNewForm={handleCreateNewForm}
       totalFormsCount={forms.length}
       totalResponsesCount={submissions.length}
       isSupabaseConnected={isSupabaseConnected}
-      onOpenSettings={() => setCurrentTab('settings')}
+      onOpenSettings={() => navigateToTab('settings')}
       onPreviewSampleEvent={() => handleOpenPublicUrl(forms[0]?.slug || 'kpcl-season-5')}
     >
       {/* TAB 1: DASHBOARD */}
@@ -286,14 +316,8 @@ function AppContent() {
           forms={forms}
           recentSubmissions={submissions}
           onCreateNewForm={handleCreateNewForm}
-          onEditForm={(id) => {
-            setActiveFormId(id);
-            setCurrentTab('new-form');
-          }}
-          onViewResponses={(id) => {
-            setActiveFormId(id);
-            setCurrentTab('responses');
-          }}
+          onEditForm={(id) => navigateToTab('new-form', id)}
+          onViewResponses={(id) => navigateToTab('responses', id)}
           onOpenPublicLink={handleOpenPublicUrl}
         />
       )}
@@ -304,18 +328,12 @@ function AppContent() {
           forms={forms}
           responseCounts={responseCounts}
           onCreateNewForm={handleCreateNewForm}
-          onEditForm={(id) => {
-            setActiveFormId(id);
-            setCurrentTab('new-form');
-          }}
+          onEditForm={(id) => navigateToTab('new-form', id)}
           onPreviewForm={(id) => {
             const f = forms.find((form) => form.id === id);
             if (f) handleOpenPublicUrl(f.slug);
           }}
-          onViewResponses={(id) => {
-            setActiveFormId(id);
-            setCurrentTab('responses');
-          }}
+          onViewResponses={(id) => navigateToTab('responses', id)}
           onDuplicateForm={handleDuplicateForm}
           onDeleteForm={handleDeleteForm}
           onTogglePublish={handleTogglePublish}
@@ -327,12 +345,9 @@ function AppContent() {
       {currentTab === 'new-form' && activeForm && (
         <FormBuilderView
           initialForm={activeForm}
-          onBack={() => setCurrentTab('forms')}
+          onBack={() => navigateToTab('forms')}
           onSaveForm={handleSaveForm}
-          onViewResponses={(id) => {
-            setActiveFormId(id);
-            setCurrentTab('responses');
-          }}
+          onViewResponses={(id) => navigateToTab('responses', id)}
           onOpenLivePublicPage={handleOpenPublicUrl}
         />
       )}
@@ -343,7 +358,7 @@ function AppContent() {
           form={activeForm}
           submissions={submissions.filter((s) => s.form_id === activeForm.id)}
           onDeleteSubmission={handleDeleteSubmission}
-          onBackToForms={() => setCurrentTab('forms')}
+          onBackToForms={() => navigateToTab('forms')}
         />
       )}
 
