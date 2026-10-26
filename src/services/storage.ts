@@ -97,11 +97,14 @@ export class StorageService {
         title: 'Event Registration Form',
         slug: cleanSlug,
         description: 'Welcome to our event registration portal. Please fill out your details below to register.',
+        cover_image_url:
+          'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80',
         status: 'published',
         theme_config: {
           accentColor: '#4f46e5',
           headerStyle: 'banner',
           themeMode: 'light',
+          backgroundStyle: 'accent_glow',
           borderRadius: 'xl',
         },
         success_message: 'Thank you! Your registration has been submitted successfully.',

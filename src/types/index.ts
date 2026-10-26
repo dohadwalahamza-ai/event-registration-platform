@@ -80,6 +80,7 @@ export interface FormThemeConfig {
   accentColor: string;
   headerStyle: 'banner' | 'card' | 'minimal';
   themeMode: 'light' | 'clean' | 'dark';
+  backgroundStyle?: 'accent_glow' | 'midnight_dark' | 'sunset_warm' | 'emerald_turf' | 'ocean_blue' | 'soft_minimal';
   fontFamily?: string;
   borderRadius: 'sm' | 'md' | 'lg' | 'xl';
 }

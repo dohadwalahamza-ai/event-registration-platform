@@ -179,11 +179,14 @@ function AppContent() {
       title: `New Event Registration Form ${count}`,
       slug: `event-form-${Date.now().toString(36)}`,
       description: 'Fill out this form to register for the upcoming event.',
+      cover_image_url:
+        'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80',
       status: 'published',
       theme_config: {
         accentColor: '#4f46e5',
         headerStyle: 'banner',
         themeMode: 'light',
+        backgroundStyle: 'accent_glow',
         borderRadius: 'xl',
       },
       success_message: 'Thank you for registering! We have recorded your submission.',

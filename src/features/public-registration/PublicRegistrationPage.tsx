@@ -214,15 +214,111 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
   }
 
   const accentColor = theme.accentColor || '#4f46e5';
+  const backgroundStyle = theme.backgroundStyle || 'accent_glow';
+
+  // Guaranteed banner image URL with reliable high-resolution sports/event fallback
+  const bannerImageUrl =
+    form.cover_image_url && form.cover_image_url.trim() !== ''
+      ? form.cover_image_url
+      : 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';
+
+  // Dynamic background atmosphere styling based on themeConfig.backgroundStyle
+  const getThemeAtmosphere = (bg: string, accent: string) => {
+    switch (bg) {
+      case 'midnight_dark':
+        return {
+          wrapperClass: 'bg-[#090d16] text-slate-100',
+          wrapperStyle: {
+            backgroundColor: '#090d16',
+            backgroundImage: `radial-gradient(ellipse 90% 50% at 50% -10%, ${accent}35 0%, transparent 70%), radial-gradient(circle at 100% 100%, ${accent}20 0%, transparent 45%)`,
+          },
+          cardClass: 'bg-slate-900 border-slate-800 text-slate-100 shadow-xl',
+          headingClass: 'text-white',
+          descClass: 'text-slate-300',
+          metaBadgeClass: 'bg-slate-800 border-slate-700 text-slate-200',
+          borderClass: 'border-slate-800',
+          footerText: 'text-slate-500',
+        };
+      case 'sunset_warm':
+        return {
+          wrapperClass: 'bg-[#fffaf5] text-slate-900',
+          wrapperStyle: {
+            backgroundColor: '#fffaf5',
+            backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #f59e0b22 0%, transparent 70%), linear-gradient(135deg, #fff7ed 0%, #fff1f2 100%)`,
+          },
+          cardClass: 'bg-white/95 border-amber-200/80 text-slate-900 shadow-md backdrop-blur-md',
+          headingClass: 'text-slate-900',
+          descClass: 'text-slate-600',
+          metaBadgeClass: 'bg-amber-50/80 border-amber-200 text-amber-900',
+          borderClass: 'border-amber-100',
+          footerText: 'text-slate-500',
+        };
+      case 'emerald_turf':
+        return {
+          wrapperClass: 'bg-[#f5fdf8] text-slate-900',
+          wrapperStyle: {
+            backgroundColor: '#f5fdf8',
+            backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #05966922 0%, transparent 70%), linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)`,
+          },
+          cardClass: 'bg-white/95 border-emerald-200/80 text-slate-900 shadow-md backdrop-blur-md',
+          headingClass: 'text-slate-900',
+          descClass: 'text-slate-600',
+          metaBadgeClass: 'bg-emerald-50/80 border-emerald-200 text-emerald-900',
+          borderClass: 'border-emerald-100',
+          footerText: 'text-slate-500',
+        };
+      case 'ocean_blue':
+        return {
+          wrapperClass: 'bg-[#f5faff] text-slate-900',
+          wrapperStyle: {
+            backgroundColor: '#f5faff',
+            backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #0284c722 0%, transparent 70%), linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)`,
+          },
+          cardClass: 'bg-white/95 border-sky-200/80 text-slate-900 shadow-md backdrop-blur-md',
+          headingClass: 'text-slate-900',
+          descClass: 'text-slate-600',
+          metaBadgeClass: 'bg-sky-50/80 border-sky-200 text-sky-900',
+          borderClass: 'border-sky-100',
+          footerText: 'text-slate-500',
+        };
+      case 'soft_minimal':
+        return {
+          wrapperClass: 'bg-slate-100 text-slate-900',
+          wrapperStyle: {
+            backgroundColor: '#f1f5f9',
+          },
+          cardClass: 'bg-white border-slate-200 text-slate-900 shadow-xs',
+          headingClass: 'text-slate-900',
+          descClass: 'text-slate-600',
+          metaBadgeClass: 'bg-slate-100 border-slate-200 text-slate-700',
+          borderClass: 'border-slate-200',
+          footerText: 'text-slate-400',
+        };
+      case 'accent_glow':
+      default:
+        return {
+          wrapperClass: 'bg-slate-50 text-slate-900',
+          wrapperStyle: {
+            backgroundColor: '#f8fafc',
+            backgroundImage: `radial-gradient(ellipse 90% 50% at 50% -15%, ${accent}28 0%, transparent 75%), radial-gradient(circle at 100% 100%, ${accent}12 0%, transparent 40%)`,
+          },
+          cardClass: 'bg-white border-slate-200/90 text-slate-900 shadow-md',
+          headingClass: 'text-slate-900',
+          descClass: 'text-slate-600',
+          metaBadgeClass: 'bg-slate-50 border-slate-200 text-slate-700',
+          borderClass: 'border-slate-100',
+          footerText: 'text-slate-400',
+        };
+    }
+  };
+
+  const atmosphere = getThemeAtmosphere(backgroundStyle, accentColor);
 
   // ACTIVE REGISTRATION FORM
   return (
     <div
-      className="min-h-screen py-6 sm:py-12 px-4 sm:px-6 font-sans relative overflow-x-hidden transition-colors duration-500"
-      style={{
-        backgroundColor: '#f8fafc',
-        backgroundImage: `radial-gradient(ellipse 90% 50% at 50% -15%, ${accentColor}28 0%, transparent 75%), radial-gradient(circle at 100% 100%, ${accentColor}12 0%, transparent 40%)`,
-      }}
+      className={`min-h-screen py-6 sm:py-12 px-4 sm:px-6 font-sans relative overflow-x-hidden transition-colors duration-500 ${atmosphere.wrapperClass}`}
+      style={atmosphere.wrapperStyle}
     >
       {/* Ambient background glow orbs matching theme */}
       <div
@@ -236,61 +332,46 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
 
       <div className="max-w-2xl sm:max-w-3xl mx-auto space-y-6 relative z-10">
         {/* Event Header Banner Card */}
-        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-md overflow-hidden">
-          {form.cover_image_url ? (
-            <div className="relative w-full overflow-hidden bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[420px] sm:max-h-[480px]">
-              {/* Blurred background mirror to prevent letterbox voids */}
-              <div
-                className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-125 pointer-events-none"
-                style={{ backgroundImage: `url(${form.cover_image_url})` }}
-              />
-              <img
-                src={form.cover_image_url}
-                alt={form.title}
-                className="w-full max-h-[420px] sm:max-h-[480px] object-contain relative z-10 mx-auto transition-transform duration-300"
-              />
-              <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent pointer-events-none" />
-              <div className="absolute bottom-5 left-6 right-6 text-white z-30">
-                <span className="text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 inline-block mb-2">
-                  Official Registration
-                </span>
-                <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight drop-shadow-md">
-                  {form.title}
-                </h1>
-              </div>
-            </div>
-          ) : (
+        <div className={`rounded-3xl border shadow-md overflow-hidden ${atmosphere.cardClass}`}>
+          {/* Always Visible High-Resolution Event Banner */}
+          <div className="relative w-full overflow-hidden bg-slate-950 flex items-center justify-center h-52 sm:h-64 md:h-72">
+            {/* Blurred background mirror to prevent letterbox voids */}
             <div
-              className="w-full relative overflow-hidden py-10 px-6 sm:px-8 text-white shadow-inner"
-              style={{
-                background: `linear-gradient(135deg, ${accentColor} 0%, #1e1b4b 100%)`,
+              className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-125 pointer-events-none"
+              style={{ backgroundImage: `url(${bannerImageUrl})` }}
+            />
+            <img
+              src={bannerImageUrl}
+              alt={form.title}
+              onError={(e) => {
+                e.currentTarget.src =
+                  'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';
               }}
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.18),transparent_60%)] pointer-events-none" />
-              <div className="relative z-10 space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/25 inline-flex items-center gap-1.5 shadow-sm">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Official Registration Portal
-                </span>
-                <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight drop-shadow-sm">
-                  {form.title}
-                </h1>
-              </div>
+              className="w-full h-full object-cover relative z-10 transition-transform duration-300"
+            />
+            <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent pointer-events-none" />
+            <div className="absolute bottom-5 left-6 right-6 text-white z-30">
+              <span className="text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 inline-block mb-2 shadow-xs">
+                Official Registration
+              </span>
+              <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight drop-shadow-md">
+                {form.title}
+              </h1>
             </div>
-          )}
+          </div>
 
           <div className="p-6 sm:p-8 space-y-5">
             {form.description && (
-              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+              <p className={`text-sm leading-relaxed whitespace-pre-line ${atmosphere.descClass}`}>
                 {form.description}
               </p>
             )}
 
             {/* Event Metadata Badges */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-100 text-xs">
+            <div className={`flex flex-wrap items-center gap-2.5 pt-2 border-t ${atmosphere.borderClass} text-xs`}>
               {form.event_date && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium">
-                  <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-medium ${atmosphere.metaBadgeClass}`}>
+                  <Calendar className="w-3.5 h-3.5 text-indigo-500" />
                   <span>
                     {new Date(form.event_date).toLocaleDateString(undefined, {
                       weekday: 'short',
@@ -303,15 +384,15 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
               )}
 
               {form.venue && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium">
-                  <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-medium ${atmosphere.metaBadgeClass}`}>
+                  <MapPin className="w-3.5 h-3.5 text-indigo-500" />
                   <span>{form.venue}</span>
                 </div>
               )}
 
               {form.registration_deadline && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 font-medium">
-                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 font-medium">
+                  <Clock className="w-3.5 h-3.5 text-amber-500" />
                   <span>
                     Closes:{' '}
                     {new Date(form.registration_deadline).toLocaleDateString(undefined, {
@@ -336,10 +417,10 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
               <div
                 key={field.id}
                 id={`field-${field.field_key}`}
-                className={`bg-white rounded-2xl p-6 border transition-all duration-300 animate-fade-in ${
+                className={`rounded-2xl p-6 border transition-all duration-300 animate-fade-in ${
                   errors[field.field_key]
-                    ? 'border-rose-300 ring-2 ring-rose-100 shadow-sm'
-                    : 'border-slate-200/90 shadow-xs'
+                    ? 'border-rose-400 ring-2 ring-rose-200/50 shadow-sm'
+                    : atmosphere.cardClass
                 }`}
               >
                 <FieldRenderer
@@ -354,9 +435,9 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           })}
 
           {/* Bottom Submit Bar */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs text-slate-500">
-              <span className="font-semibold text-slate-700">Protected Submission:</span> Your
+          <div className={`rounded-2xl p-6 border shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 ${atmosphere.cardClass}`}>
+            <div className={`text-xs ${atmosphere.descClass}`}>
+              <span className={`font-semibold ${atmosphere.headingClass}`}>Protected Submission:</span> Your
               responses are saved directly to the database.
             </div>
 
@@ -375,7 +456,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         </form>
 
         {/* Footer branding */}
-        <div className="text-center text-xs text-slate-400 py-4">
+        <div className={`text-center text-xs py-4 ${atmosphere.footerText}`}>
           Powered by <span className="font-semibold text-slate-600">EventForm</span> • Secure &
           Fast Event Registration
         </div>

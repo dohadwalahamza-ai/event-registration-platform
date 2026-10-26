@@ -56,6 +56,72 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
     { name: 'Slate Dark', value: '#0f172a' },
   ];
 
+  const bannerPresets = [
+    {
+      name: 'Cricket Stadium Turf',
+      url: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80',
+    },
+    {
+      name: 'Football Pitch',
+      url: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1600&q=80',
+    },
+    {
+      name: 'Championship Trophy',
+      url: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1600&q=80',
+    },
+    {
+      name: 'Tech Hackathon & AI',
+      url: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1600&q=80',
+    },
+    {
+      name: 'Conference & Stage',
+      url: 'https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=1600&q=80',
+    },
+    {
+      name: 'Music & Festival Lights',
+      url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1600&q=80',
+    },
+  ];
+
+  const backgroundPresets = [
+    {
+      id: 'accent_glow',
+      name: 'Accent Glow (Default)',
+      desc: 'Ambient mesh glow with brand color',
+      stylePreview: 'bg-gradient-to-br from-indigo-50/80 via-slate-50 to-white border-indigo-200',
+    },
+    {
+      id: 'midnight_dark',
+      name: 'Midnight Dark',
+      desc: 'Sleek dark theme with glowing neon highlights',
+      stylePreview: 'bg-slate-900 border-slate-700 text-white',
+    },
+    {
+      id: 'sunset_warm',
+      name: 'Sunset Warm',
+      desc: 'Warm ambient peach and amber glow',
+      stylePreview: 'bg-gradient-to-br from-amber-50 via-rose-50 to-orange-50 border-amber-200',
+    },
+    {
+      id: 'emerald_turf',
+      name: 'Emerald Turf',
+      desc: 'Sports turf athletic green and mint',
+      stylePreview: 'bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 border-emerald-200',
+    },
+    {
+      id: 'ocean_blue',
+      name: 'Ocean Blue',
+      desc: 'Deep marine cyan and royal blue',
+      stylePreview: 'bg-gradient-to-br from-sky-50 via-cyan-50 to-blue-50 border-sky-200',
+    },
+    {
+      id: 'soft_minimal',
+      name: 'Soft Minimal',
+      desc: 'Clean, distraction-free neutral slate',
+      stylePreview: 'bg-slate-100 border-slate-300',
+    },
+  ];
+
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -106,54 +172,105 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       <div className="space-y-6 text-sm">
         {/* Banner Cover Image */}
         <div>
-          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
-            Event Cover Image / Poster
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
+              Event Cover Image / Banner
+            </label>
+            <span className="text-[11px] text-slate-500">Visible on public registration page</span>
+          </div>
+
           {coverImageUrl ? (
-            <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 h-40">
+            <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 h-44 mb-3 group shadow-sm">
               <img
                 src={coverImageUrl}
                 alt="Banner preview"
                 className="w-full h-full object-cover"
               />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute bottom-3 left-4 text-white text-xs font-medium">
+                Active Cover Preview
+              </div>
               <button
                 type="button"
                 onClick={() => setCoverImageUrl('')}
-                className="absolute top-3 right-3 p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md transition-all"
+                className="absolute top-3 right-3 p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md transition-all flex items-center gap-1 text-xs font-semibold px-2.5"
                 title="Remove cover"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
+                <span>Remove</span>
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-3">
-              <label className="flex-1 flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 hover:border-indigo-500 bg-slate-50 hover:bg-slate-100/60 rounded-2xl cursor-pointer transition-colors">
-                <UploadCloud className="w-6 h-6 text-slate-400 mb-1" />
-                <span className="text-xs font-semibold text-slate-700">
-                  Upload Event Banner or Poster
-                </span>
-                <span className="text-[10px] text-slate-400">Recommended: 1600 x 600 px (PNG/JPG)</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageFile}
-                  className="hidden"
-                />
-              </label>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setCoverImageUrl(
-                    'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80'
-                  )
-                }
-                className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 py-3 px-4 rounded-xl shrink-0"
-              >
-                Use Sports Banner
-              </button>
+            <div className="p-4 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 text-center mb-3">
+              <p className="text-xs text-slate-500 mb-2">No custom banner chosen. A default high-resolution banner will be displayed.</p>
             </div>
           )}
+
+          {/* Banner Upload & Custom URL Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <label className="flex items-center justify-center gap-2 p-3 border border-slate-200 hover:border-indigo-400 bg-slate-50 hover:bg-indigo-50/30 rounded-xl cursor-pointer transition-colors text-xs font-medium text-slate-700">
+              <UploadCloud className="w-4 h-4 text-indigo-600" />
+              <span>Upload Custom Banner File</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageFile}
+                className="hidden"
+              />
+            </label>
+
+            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden px-3 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-600">
+              <span className="text-[11px] text-slate-400 shrink-0 mr-1.5">Image URL:</span>
+              <input
+                type="url"
+                value={coverImageUrl}
+                onChange={(e) => setCoverImageUrl(e.target.value)}
+                placeholder="https://images.unsplash.com/..."
+                className="w-full py-2 bg-transparent text-slate-800 text-xs focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Banner Presets Grid */}
+          <div>
+            <span className="block text-[11px] font-semibold text-slate-600 mb-1.5">
+              Or pick from one-click event banner templates:
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {bannerPresets.map((preset) => {
+                const isSelected = coverImageUrl === preset.url;
+                return (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => setCoverImageUrl(preset.url)}
+                    className={`relative rounded-xl overflow-hidden border text-left p-1 transition-all group ${
+                      isSelected
+                        ? 'border-indigo-600 ring-2 ring-indigo-500/30 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="h-16 w-full rounded-lg overflow-hidden relative bg-slate-900">
+                      <img
+                        src={preset.url}
+                        alt={preset.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-slate-950/40 group-hover:bg-slate-950/20 transition-colors" />
+                      {isSelected && (
+                        <div className="absolute top-1.5 right-1.5 p-0.5 rounded-full bg-indigo-600 text-white">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-semibold text-slate-800 truncate mt-1 px-1">
+                      {preset.name}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Basic Event Info */}
@@ -264,6 +381,63 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
                   />
                   <span>{c.name}</span>
                   {isSelected && <Check className="w-3 h-3 ml-0.5" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Background Theme Atmosphere Selection */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
+              Background Theme & Page Atmosphere
+            </label>
+            <span className="text-[11px] text-slate-500">Live styling for public registration form</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {backgroundPresets.map((bg) => {
+              const currentBg = themeConfig.backgroundStyle || 'accent_glow';
+              const isSelected = currentBg === bg.id;
+              return (
+                <button
+                  key={bg.id}
+                  type="button"
+                  onClick={() =>
+                    setThemeConfig({
+                      ...themeConfig,
+                      backgroundStyle: bg.id as any,
+                      themeMode: bg.id === 'midnight_dark' ? 'dark' : 'light',
+                    })
+                  }
+                  className={`flex items-start gap-3 p-3 rounded-2xl border text-left transition-all ${
+                    isSelected
+                      ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-500/20 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300 bg-white'
+                  }`}
+                >
+                  <div
+                    className={`w-9 h-9 rounded-xl border shrink-0 flex items-center justify-center shadow-xs ${bg.stylePreview}`}
+                  >
+                    {isSelected && (
+                      <Check
+                        className={`w-4 h-4 ${
+                          bg.id === 'midnight_dark' ? 'text-white' : 'text-indigo-600'
+                        }`}
+                      />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">{bg.name}</span>
+                      {isSelected && (
+                        <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug mt-0.5">{bg.desc}</p>
+                  </div>
                 </button>
               );
             })}

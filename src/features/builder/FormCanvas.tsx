@@ -39,48 +39,81 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
   onOpenFieldLibrary,
 }) => {
   const fields = form.fields || [];
+  const backgroundStyle = form.theme_config?.backgroundStyle || 'accent_glow';
+  const accentColor = form.theme_config?.accentColor || '#4f46e5';
+
+  const bannerImageUrl =
+    form.cover_image_url && form.cover_image_url.trim() !== ''
+      ? form.cover_image_url
+      : 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';
+
+  const getCanvasBackground = () => {
+    switch (backgroundStyle) {
+      case 'midnight_dark':
+        return {
+          backgroundColor: '#090d16',
+          backgroundImage: `radial-gradient(ellipse at 50% 0%, ${accentColor}30 0%, transparent 60%)`,
+        };
+      case 'sunset_warm':
+        return {
+          backgroundColor: '#fffaf5',
+          backgroundImage: `radial-gradient(ellipse at 50% 0%, #f59e0b20 0%, transparent 60%), linear-gradient(135deg, #fff7ed 0%, #fff1f2 100%)`,
+        };
+      case 'emerald_turf':
+        return {
+          backgroundColor: '#f5fdf8',
+          backgroundImage: `radial-gradient(ellipse at 50% 0%, #05966920 0%, transparent 60%), linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)`,
+        };
+      case 'ocean_blue':
+        return {
+          backgroundColor: '#f5faff',
+          backgroundImage: `radial-gradient(ellipse at 50% 0%, #0284c720 0%, transparent 60%), linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)`,
+        };
+      case 'soft_minimal':
+        return {
+          backgroundColor: '#f1f5f9',
+          backgroundImage: 'none',
+        };
+      case 'accent_glow':
+      default:
+        return {
+          backgroundColor: '#f1f5f9',
+          backgroundImage: `radial-gradient(ellipse at 50% 0%, ${accentColor}18 0%, transparent 60%)`,
+        };
+    }
+  };
 
   return (
     <div
       className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto transition-colors duration-500"
-      style={{
-        backgroundColor: '#f1f5f9',
-        backgroundImage: `radial-gradient(ellipse at 50% 0%, ${form.theme_config?.accentColor || '#4f46e5'}18 0%, transparent 60%)`,
-      }}
+      style={getCanvasBackground()}
     >
       <div className="max-w-3xl mx-auto space-y-5">
         {/* Event Header Banner Card */}
         <div
           onClick={onOpenBranding}
-          className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden cursor-pointer hover:border-indigo-300 transition-all group relative"
+          className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden cursor-pointer hover:border-indigo-400 transition-all group relative"
         >
-          {form.cover_image_url ? (
-            <div className="h-44 sm:h-56 w-full relative overflow-hidden bg-slate-900">
-              <img
-                src={form.cover_image_url}
-                alt={form.title}
-                className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500 opacity-90"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent" />
-              <div className="absolute bottom-4 left-6 right-6 text-white">
-                <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 inline-block mb-1.5">
-                  Click to Customize Banner & Theme
-                </span>
-                <h1 className="text-xl sm:text-2xl font-bold leading-tight">
-                  {form.title || 'Untitled Event Form'}
-                </h1>
-              </div>
-            </div>
-          ) : (
-            <div className="p-6 bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white">
-              <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-indigo-200 border border-white/20 inline-block mb-2">
-                Click to Add Banner & Branding
+          <div className="h-44 sm:h-56 w-full relative overflow-hidden bg-slate-900">
+            <img
+              src={bannerImageUrl}
+              alt={form.title}
+              onError={(e) => {
+                e.currentTarget.src =
+                  'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';
+              }}
+              className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500 opacity-90"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent" />
+            <div className="absolute bottom-4 left-6 right-6 text-white">
+              <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 inline-block mb-1.5 shadow-xs">
+                Click to Customize Banner & Theme
               </span>
-              <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight">
+              <h1 className="text-xl sm:text-2xl font-bold leading-tight">
                 {form.title || 'Untitled Event Form'}
               </h1>
             </div>
-          )}
+          </div>
 
           {/* Description & Event Metadata */}
           <div className="p-6 space-y-4">

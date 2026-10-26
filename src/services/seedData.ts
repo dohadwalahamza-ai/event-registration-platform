@@ -19,6 +19,7 @@ export const SAMPLE_FORMS: Form[] = [
       accentColor: '#4f46e5',
       headerStyle: 'banner',
       themeMode: 'light',
+      backgroundStyle: 'emerald_turf',
       borderRadius: 'xl',
     },
     success_message:
@@ -435,6 +436,7 @@ export const SAMPLE_FORMS: Form[] = [
       accentColor: '#0284c7',
       headerStyle: 'banner',
       themeMode: 'light',
+      backgroundStyle: 'ocean_blue',
       borderRadius: 'lg',
     },
     success_message:
