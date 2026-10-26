@@ -1,122 +1,370 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import React, { useState, useEffect } from 'react';
+import { Form, Submission, DashboardStats } from './types';
+import { StorageService } from './services/storage';
+import { getSupabaseClient } from './services/supabaseClient';
+import { Layout } from './generic-ui/Layout';
+import { NavigationTab } from './generic-ui/Sidebar';
+import { ToastProvider, useToast } from './generic-ui/ToastContext';
+import { DashboardView } from './features/dashboard/DashboardView';
+import { FormsListView } from './features/forms/FormsListView';
+import { FormBuilderView } from './features/builder/FormBuilderView';
+import { ResponseManagementView } from './features/responses/ResponseManagementView';
+import { SettingsView } from './features/settings/SettingsView';
+import { PublicRegistrationPage } from './features/public-registration/PublicRegistrationPage';
+import { Loader2 } from 'lucide-react';
 
-function App() {
-  const [count, setCount] = useState(0)
+function AppContent() {
+  const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
+  const [forms, setForms] = useState<Form[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [activeFormId, setActiveFormId] = useState<string | null>(null);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalForms: 0,
+    publishedForms: 0,
+    totalRegistrations: 0,
+    recentSubmissions: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
+
+  // Check URL hash for public page routes, e.g. #/e/kpcl-season-5
+  const [publicSlug, setPublicSlug] = useState<string | null>(null);
+  const { success, error } = useToast();
+
+  const parseRoute = () => {
+    const hash = window.location.hash;
+    const path = window.location.pathname;
+
+    let slug: string | null = null;
+    if (hash.startsWith('#/e/')) {
+      slug = hash.replace('#/e/', '').split('?')[0];
+    } else if (path.startsWith('/e/')) {
+      slug = path.replace('/e/', '').split('?')[0];
+    }
+    setPublicSlug(slug);
+  };
+
+  useEffect(() => {
+    parseRoute();
+    window.addEventListener('hashchange', parseRoute);
+    window.addEventListener('popstate', parseRoute);
+    return () => {
+      window.removeEventListener('hashchange', parseRoute);
+      window.removeEventListener('popstate', parseRoute);
+    };
+  }, []);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const allForms = await StorageService.getForms();
+      const allSubmissions = await StorageService.getAllSubmissions();
+      const dashboardStats = await StorageService.getDashboardStats();
+
+      setForms(allForms);
+      setSubmissions(allSubmissions);
+      setStats(dashboardStats);
+
+      // Check Supabase connection
+      const client = getSupabaseClient();
+      setIsSupabaseConnected(Boolean(client));
+
+      // Set active form default if none selected
+      if (!activeFormId && allForms.length > 0) {
+        setActiveFormId(allForms[0].id);
+      }
+    } catch (e) {
+      console.error('Failed to load storage data', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Compute response counts per form
+  const responseCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const sub of submissions) {
+      counts[sub.form_id] = (counts[sub.form_id] || 0) + 1;
+    }
+    return counts;
+  }, [submissions]);
+
+  // Handle creating a new form
+  const handleCreateNewForm = async () => {
+    const newId = `form-${Date.now().toString(36)}`;
+    const count = forms.length + 1;
+    const newForm: Form = {
+      id: newId,
+      owner_id: 'admin-1',
+      title: `New Event Registration Form ${count}`,
+      slug: `event-form-${Date.now().toString(36)}`,
+      description: 'Fill out this form to register for the upcoming event.',
+      status: 'draft',
+      theme_config: {
+        accentColor: '#4f46e5',
+        headerStyle: 'banner',
+        themeMode: 'light',
+        borderRadius: 'xl',
+      },
+      success_message: 'Thank you for registering! We have recorded your submission.',
+      published_version: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      fields: [
+        {
+          id: `f-${Math.random().toString(36).substring(2, 8)}`,
+          form_id: newId,
+          field_key: 'full_name',
+          label: 'Full Name',
+          field_type: 'short_text',
+          placeholder: 'Enter your full name',
+          required: true,
+          sort_order: 1,
+        },
+        {
+          id: `f-${Math.random().toString(36).substring(2, 8)}`,
+          form_id: newId,
+          field_key: 'email',
+          label: 'Email Address',
+          field_type: 'email',
+          placeholder: 'name@example.com',
+          required: true,
+          sort_order: 2,
+        },
+        {
+          id: `f-${Math.random().toString(36).substring(2, 8)}`,
+          form_id: newId,
+          field_key: 'phone_number',
+          label: 'Phone / WhatsApp Number',
+          field_type: 'phone',
+          placeholder: '+91 98765 43210',
+          required: true,
+          sort_order: 3,
+        },
+      ],
+    };
+
+    const saved = await StorageService.saveForm(newForm);
+    setForms((prev) => [saved, ...prev]);
+    setActiveFormId(saved.id);
+    setCurrentTab('new-form');
+    success('Form Initialized', 'Start customizing fields and settings.');
+  };
+
+  // Handle saving form from builder
+  const handleSaveForm = async (updated: Form) => {
+    const saved = await StorageService.saveForm(updated);
+    setForms((prev) => prev.map((f) => (f.id === saved.id ? saved : f)));
+  };
+
+  // Duplicate form
+  const handleDuplicateForm = async (formId: string) => {
+    const duplicated = await StorageService.duplicateForm(formId);
+    setForms((prev) => [duplicated, ...prev]);
+    setActiveFormId(duplicated.id);
+  };
+
+  // Delete form
+  const handleDeleteForm = async (formId: string) => {
+    await StorageService.deleteForm(formId);
+    setForms((prev) => prev.filter((f) => f.id !== formId));
+    setSubmissions((prev) => prev.filter((s) => s.form_id !== formId));
+    if (activeFormId === formId) {
+      setActiveFormId(forms[0]?.id || null);
+    }
+  };
+
+  // Toggle publish status
+  const handleTogglePublish = async (form: Form) => {
+    const nextStatus = form.status === 'published' ? 'draft' : 'published';
+    const updated: Form = { ...form, status: nextStatus };
+    await StorageService.saveForm(updated);
+    setForms((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    success('Status Updated', `Form is now ${nextStatus.toUpperCase()}`);
+  };
+
+  // Delete submission
+  const handleDeleteSubmission = async (submissionId: string) => {
+    await StorageService.deleteSubmission(submissionId);
+    setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
+  };
+
+  // Open public page
+  const handleOpenPublicUrl = (slug: string) => {
+    window.location.hash = `/e/${slug}`;
+  };
+
+  // PUBLIC REGISTRATION ROUTE
+  if (publicSlug) {
+    const publicForm = forms.find((f) => f.slug.toLowerCase() === publicSlug.toLowerCase());
+
+    if (!publicForm) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 text-center">
+          <div className="max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-md space-y-4">
+            <h2 className="text-xl font-bold text-slate-800">Event Form Not Found</h2>
+            <p className="text-xs text-slate-500">
+              The event URL <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">/e/{publicSlug}</code> does not exist or may have been unpublished.
+            </p>
+            <button
+              onClick={() => {
+                window.location.hash = '';
+                setPublicSlug(null);
+              }}
+              className="text-xs font-semibold text-indigo-600 hover:underline"
+            >
+              Return to Platform Home
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="relative">
+        {/* Floating Top Banner to switch back to Admin for convenience */}
+        <div className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md text-white text-xs px-4 py-2 flex items-center justify-between border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-medium">Public Participant View: /e/{publicForm.slug}</span>
+          </div>
+          <button
+            onClick={() => {
+              window.location.hash = '';
+              setPublicSlug(null);
+            }}
+            className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-[11px] transition-colors"
+          >
+            ← Admin Dashboard
+          </button>
+        </div>
+
+        <PublicRegistrationPage form={publicForm} />
+      </div>
+    );
+  }
+
+  // Active form for builder or responses
+  const activeForm = forms.find((f) => f.id === activeFormId) || forms[0];
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+          <span className="text-xs font-medium text-slate-500">Loading EventForm Platform...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <Layout
+      currentTab={currentTab}
+      onSelectTab={(tab) => {
+        if (tab === 'new-form') {
+          handleCreateNewForm();
+        } else {
+          setCurrentTab(tab);
+        }
+      }}
+      onCreateNewForm={handleCreateNewForm}
+      totalFormsCount={forms.length}
+      totalResponsesCount={submissions.length}
+      isSupabaseConnected={isSupabaseConnected}
+      onOpenSettings={() => setCurrentTab('settings')}
+      onPreviewSampleEvent={() => handleOpenPublicUrl(forms[0]?.slug || 'kpcl-season-5')}
+    >
+      {/* TAB 1: DASHBOARD */}
+      {currentTab === 'dashboard' && (
+        <DashboardView
+          stats={stats}
+          forms={forms}
+          recentSubmissions={submissions}
+          onCreateNewForm={handleCreateNewForm}
+          onEditForm={(id) => {
+            setActiveFormId(id);
+            setCurrentTab('new-form');
+          }}
+          onViewResponses={(id) => {
+            setActiveFormId(id);
+            setCurrentTab('responses');
+          }}
+          onOpenPublicLink={handleOpenPublicUrl}
+        />
+      )}
 
-      <div className="ticks"></div>
+      {/* TAB 2: ALL FORMS */}
+      {currentTab === 'forms' && (
+        <FormsListView
+          forms={forms}
+          responseCounts={responseCounts}
+          onCreateNewForm={handleCreateNewForm}
+          onEditForm={(id) => {
+            setActiveFormId(id);
+            setCurrentTab('new-form');
+          }}
+          onPreviewForm={(id) => {
+            const f = forms.find((form) => form.id === id);
+            if (f) handleOpenPublicUrl(f.slug);
+          }}
+          onViewResponses={(id) => {
+            setActiveFormId(id);
+            setCurrentTab('responses');
+          }}
+          onDuplicateForm={handleDuplicateForm}
+          onDeleteForm={handleDeleteForm}
+          onTogglePublish={handleTogglePublish}
+          onOpenPublicUrl={handleOpenPublicUrl}
+        />
+      )}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      {/* TAB 3: FORM BUILDER VIEW */}
+      {currentTab === 'new-form' && activeForm && (
+        <FormBuilderView
+          initialForm={activeForm}
+          onBack={() => setCurrentTab('forms')}
+          onSaveForm={handleSaveForm}
+          onViewResponses={(id) => {
+            setActiveFormId(id);
+            setCurrentTab('responses');
+          }}
+          onOpenLivePublicPage={handleOpenPublicUrl}
+        />
+      )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {/* TAB 4: RESPONSES VIEW */}
+      {currentTab === 'responses' && activeForm && (
+        <ResponseManagementView
+          form={activeForm}
+          submissions={submissions.filter((s) => s.form_id === activeForm.id)}
+          onDeleteSubmission={handleDeleteSubmission}
+          onBackToForms={() => setCurrentTab('forms')}
+        />
+      )}
+
+      {/* TAB 5: SETTINGS */}
+      {currentTab === 'settings' && (
+        <SettingsView
+          isSupabaseConnected={isSupabaseConnected}
+          onRefreshConnection={() => {
+            const client = getSupabaseClient();
+            setIsSupabaseConnected(Boolean(client));
+          }}
+        />
+      )}
+    </Layout>
+  );
 }
 
-export default App
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
+  );
+}
