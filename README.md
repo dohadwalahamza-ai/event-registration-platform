@@ -108,12 +108,18 @@ The codebase is organized into cleanly decoupled feature modules and a generic U
 
 The repository contains isolated feature branches corresponding to each core capability:
 - `main`: Complete, integrated, production-ready application
+- `feature/admin-auth`: Administrator authentication with Supabase Auth, session guards, and login/logout UI
 - `feature/generic-ui`: Side menu, header, footer, modal, button, badge, and toast system
 - `feature/conditional-logic`: Dynamic reactive evaluation engine & visual rule editor
 - `feature/form-builder`: Visual canvas, 20 field types, drag-and-drop reordering, inspector
 - `feature/public-registration`: Public mobile-first registration landing page (`/e/:slug`)
 - `feature/response-management`: Responses table, CSV export, submission viewer
 - `feature/supabase-backend`: Supabase client, schema SQL, RLS policies, and storage configs
+
+### 🔑 Administrator Credentials (Demo Mode)
+- **Email**: `admin@eventform.com`
+- **Password**: `admin123`
+*(Or click **"Fill Demo Admin"** on the login page for 1-click test sign in!)*
 
 ---
 
