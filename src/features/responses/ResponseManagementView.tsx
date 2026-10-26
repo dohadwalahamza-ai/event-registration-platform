@@ -15,22 +15,34 @@ import {
   X,
   ExternalLink,
   Camera,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
 import { Modal } from '../../generic-ui/components/Modal';
 import { useToast } from '../../generic-ui/ToastContext';
+import { isSubmissionForForm } from '../../services/storage';
 
 interface ResponseManagementViewProps {
   form: Form;
+  forms?: Form[];
+  allSubmissions?: Submission[];
   submissions: Submission[];
+  onSelectForm?: (formId: string) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
   onDeleteSubmission: (id: string) => Promise<void>;
   onBackToForms: () => void;
 }
 
 export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
   form,
+  forms = [],
+  allSubmissions = [],
   submissions,
+  onSelectForm,
+  onRefresh,
+  isRefreshing = false,
   onDeleteSubmission,
   onBackToForms,
 }) => {
@@ -161,7 +173,39 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {forms && forms.length > 1 && onSelectForm && (
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase">Event:</span>
+              <select
+                value={form.id}
+                onChange={(e) => onSelectForm(e.target.value)}
+                className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer max-w-[180px] truncate"
+              >
+                {forms.map((f) => {
+                  const count = (allSubmissions || []).filter((s) => isSubmissionForForm(s, f)).length;
+                  return (
+                    <option key={f.id} value={f.id}>
+                      {f.title} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
+          {onRefresh && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              isLoading={isRefreshing}
+              leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />}
+            >
+              Refresh DB
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="sm"

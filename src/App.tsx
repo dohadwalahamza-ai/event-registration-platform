@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Submission, DashboardStats } from './types';
-import { StorageService } from './services/storage';
+import { StorageService, isSubmissionForForm } from './services/storage';
 import { getSupabaseClient } from './services/supabaseClient';
 import { Layout } from './generic-ui/Layout';
 import { NavigationTab } from './generic-ui/Sidebar';
@@ -21,6 +21,7 @@ function AppContent() {
   const [forms, setForms] = useState<Form[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [activeFormId, setActiveFormId] = useState<string | null>(null);
+  const [isRefreshingSubs, setIsRefreshingSubs] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     totalForms: 0,
     publishedForms: 0,
@@ -126,9 +127,60 @@ function AppContent() {
     }
   };
 
+  const handleRefreshSubmissions = async () => {
+    setIsRefreshingSubs(true);
+    try {
+      const allSubmissions = await StorageService.getAllSubmissions();
+      setSubmissions(allSubmissions);
+      const dashboardStats = await StorageService.getDashboardStats();
+      setStats(dashboardStats);
+    } catch (e) {
+      console.warn('Failed to refresh submissions:', e);
+    } finally {
+      setIsRefreshingSubs(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Listen for real-time submission creations across windows and tabs
+  useEffect(() => {
+    const handleSubmissionCreated = (e: any) => {
+      const newSub: Submission = e.detail;
+      if (newSub) {
+        setSubmissions((prev) => {
+          if (prev.some((s) => s.id === newSub.id)) return prev;
+          return [newSub, ...prev];
+        });
+        StorageService.getDashboardStats().then(setStats).catch(() => {});
+      }
+    };
+
+    window.addEventListener('submission_created', handleSubmissionCreated);
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'eventform_submissions_v1') {
+        StorageService.getAllSubmissions().then(setSubmissions).catch(() => {});
+        StorageService.getDashboardStats().then(setStats).catch(() => {});
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('submission_created', handleSubmissionCreated);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  // Automatically refresh submissions when switching to Responses or Dashboard
+  useEffect(() => {
+    if (currentTab === 'responses' || currentTab === 'dashboard') {
+      StorageService.getAllSubmissions().then(setSubmissions).catch(() => {});
+      StorageService.getDashboardStats().then(setStats).catch(() => {});
+    }
+  }, [currentTab]);
 
   // Dedicated loader for public event registration pages
   useEffect(() => {
@@ -195,14 +247,14 @@ function AppContent() {
     };
   }, [publicSlug]);
 
-  // Compute response counts per form
+  // Compute response counts per form with normalized ID and slug matching
   const responseCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const sub of submissions) {
-      counts[sub.form_id] = (counts[sub.form_id] || 0) + 1;
+    for (const f of forms) {
+      counts[f.id] = submissions.filter((s) => isSubmissionForForm(s, f)).length;
     }
     return counts;
-  }, [submissions]);
+  }, [forms, submissions]);
 
   // Handle creating a new form
   const handleCreateNewForm = async () => {
@@ -419,8 +471,15 @@ function AppContent() {
     );
   }
 
-  // Active form for builder or responses
-  const activeForm = forms.find((f) => f.id === activeFormId) || forms[0];
+  // Active form for builder or responses (matching ID, slug, or core normalized ID)
+  const activeForm =
+    forms.find(
+      (f) =>
+        f.id === activeFormId ||
+        f.slug === activeFormId ||
+        (activeFormId && f.id.replace(/^(event-form-|form-)/, '') === activeFormId.replace(/^(event-form-|form-)/, '')) ||
+        (activeFormId && f.slug.replace(/^(event-form-|form-)/, '') === activeFormId.replace(/^(event-form-|form-)/, ''))
+    ) || forms[0];
 
   // 4. AUTHENTICATED ADMIN DASHBOARD
   return (
@@ -494,7 +553,12 @@ function AppContent() {
       {currentTab === 'responses' && activeForm && (
         <ResponseManagementView
           form={activeForm}
-          submissions={submissions.filter((s) => s.form_id === activeForm.id)}
+          forms={forms}
+          allSubmissions={submissions}
+          submissions={submissions.filter((s) => isSubmissionForForm(s, activeForm))}
+          onSelectForm={(id) => setActiveFormId(id)}
+          onRefresh={handleRefreshSubmissions}
+          isRefreshing={isRefreshingSubs}
           onDeleteSubmission={handleDeleteSubmission}
           onBackToForms={() => navigateToTab('forms')}
         />

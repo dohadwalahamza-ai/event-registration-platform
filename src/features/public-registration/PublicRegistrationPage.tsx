@@ -341,25 +341,33 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           const sub = await StorageService.submitRegistration(
             form.id,
             form.published_version || 1,
-            sanitized
+            sanitized,
+            form.title
           );
           if (sub && sub.id) {
             subId = sub.id;
           }
         } catch (storageErr) {
           console.warn('StorageService submission error, saving fallback locally:', storageErr);
-          // Fallback local save so user registration is NEVER lost
+          const applicantName = sanitized.full_name || sanitized.applicant_name || sanitized.name || sanitized.team_name || 'Participant';
+          const applicantEmail = sanitized.email || sanitized.contact_email || '';
           const fallbackSub = {
             id: subId,
             form_id: form.id,
             form_version: form.published_version || 1,
-            data: sanitized,
+            submission_data: sanitized,
             submitted_at: new Date().toISOString(),
+            status: 'confirmed' as const,
+            applicant_name: applicantName,
+            applicant_email: applicantEmail,
           };
           try {
-            const raw = localStorage.getItem('event_platform_submissions');
+            const raw = localStorage.getItem('eventform_submissions_v1');
             const list = raw ? JSON.parse(raw) : [];
-            localStorage.setItem('event_platform_submissions', JSON.stringify([fallbackSub, ...list]));
+            localStorage.setItem('eventform_submissions_v1', JSON.stringify([fallbackSub, ...list.filter((s: any) => s.id !== subId)]));
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('submission_created', { detail: fallbackSub }));
+            }
           } catch (e) {
             console.warn('LocalStorage fallback write error:', e);
           }

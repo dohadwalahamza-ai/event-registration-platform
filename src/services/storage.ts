@@ -575,6 +575,9 @@ export class StorageService {
    */
   static async getAllSubmissions(): Promise<Submission[]> {
     const deletedSubmissionIds = getDeletedSubmissionIds();
+
+    // 1. Fetch remote submissions from Supabase
+    let remoteList: Submission[] = [];
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -583,39 +586,141 @@ export class StorageService {
           .select('*')
           .order('submitted_at', { ascending: false });
 
-        if (!error && data) {
-          return data.filter((s: any) => !deletedSubmissionIds.has(s.id));
+        if (!error && Array.isArray(data)) {
+          remoteList = data;
+        } else if (error) {
+          console.warn('Supabase submissions query error:', error.message);
         }
       } catch (err) {
         console.warn('Supabase submissions fetch error, falling back', err);
       }
     }
 
+    // 2. Fetch local submissions from LocalStorage
+    let localList: Submission[] = [];
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
-      const list: Submission[] = raw ? JSON.parse(raw) : INITIAL_SUBMISSIONS;
-      return list.filter((s) => !deletedSubmissionIds.has(s.id));
+      localList = raw ? JSON.parse(raw) : [];
     } catch {
-      return INITIAL_SUBMISSIONS.filter((s) => !deletedSubmissionIds.has(s.id));
+      localList = [];
     }
+
+    // 3. Fallback to initial sample submissions if system is completely fresh
+    if (remoteList.length === 0 && localList.length === 0) {
+      const hasInit = typeof window !== 'undefined' && localStorage.getItem('eventform_initialized_subs');
+      if (!hasInit) {
+        localList = INITIAL_SUBMISSIONS;
+        try {
+          localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(INITIAL_SUBMISSIONS));
+          localStorage.setItem('eventform_initialized_subs', 'true');
+        } catch {}
+      }
+    }
+
+    // 4. Merge remote and local submissions deduplicated by ID
+    const mergedMap = new Map<string, Submission>();
+    for (const s of remoteList) {
+      if (!deletedSubmissionIds.has(s.id)) {
+        mergedMap.set(s.id, s);
+      }
+    }
+    for (const s of localList) {
+      if (!deletedSubmissionIds.has(s.id)) {
+        if (!mergedMap.has(s.id)) {
+          mergedMap.set(s.id, s);
+        }
+      }
+    }
+
+    const mergedList = Array.from(mergedMap.values()).sort(
+      (a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+    );
+
+    // Keep LocalStorage up to date with merged list
+    try {
+      localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(mergedList));
+    } catch {}
+
+    // 5. Asynchronously sync any local-only entries to Supabase in the background
+    if (supabase && localList.length > 0) {
+      const remoteIds = new Set(remoteList.map((r) => r.id));
+      const missingRemote = localList.filter((l) => !remoteIds.has(l.id) && !deletedSubmissionIds.has(l.id));
+      if (missingRemote.length > 0) {
+        (async () => {
+          for (const item of missingRemote) {
+            try {
+              // Ensure parent form row exists first to prevent foreign key errors
+              await supabase.from('forms').upsert({
+                id: item.form_id,
+                owner_id: 'admin',
+                title: 'Event Form',
+                slug: item.form_id,
+                status: 'published',
+                updated_at: new Date().toISOString(),
+              });
+              await supabase.from('submissions').insert([
+                {
+                  id: item.id,
+                  form_id: item.form_id,
+                  form_version: item.form_version || 1,
+                  submission_data: item.submission_data,
+                  submitted_at: item.submitted_at,
+                  status: item.status || 'confirmed',
+                  applicant_name: item.applicant_name,
+                  applicant_email: item.applicant_email,
+                },
+              ]);
+            } catch (syncErr) {
+              console.warn('Background sync submission to Supabase error:', syncErr);
+            }
+          }
+        })();
+      }
+    }
+
+    return mergedList;
   }
 
   static async getSubmissionsForForm(formId: string): Promise<Submission[]> {
     const all = await this.getAllSubmissions();
-    return all.filter((s) => s.form_id === formId);
+    const cleanId = formId.toLowerCase().replace(/^(event-form-|form-)/, '');
+    return all.filter((s) => {
+      if (s.form_id === formId) return true;
+      const cleanSub = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+      return cleanSub !== '' && cleanSub === cleanId;
+    });
   }
 
   static async submitRegistration(
     formId: string,
     formVersion: number,
-    data: Record<string, any>
+    data: Record<string, any>,
+    formTitle?: string
   ): Promise<Submission> {
     const applicantName = data.full_name || data.applicant_name || data.name || data.team_name || 'Participant';
     const applicantEmail = data.email || data.contact_email || '';
 
+    // Normalize form ID to canonical form if present
+    let resolvedFormId = formId;
+    let resolvedFormTitle = formTitle || 'Event Form';
+    try {
+      const allForms = await this.getForms();
+      const matched = allForms.find(
+        (f) =>
+          f.id === formId ||
+          f.slug === formId ||
+          f.id.replace(/^(event-form-|form-)/, '') === formId.replace(/^(event-form-|form-)/, '') ||
+          f.slug.replace(/^(event-form-|form-)/, '') === formId.replace(/^(event-form-|form-)/, '')
+      );
+      if (matched) {
+        resolvedFormId = matched.id;
+        resolvedFormTitle = matched.title;
+      }
+    } catch {}
+
     const newSub: Submission = {
       id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      form_id: formId,
+      form_id: resolvedFormId,
       form_version: formVersion,
       submission_data: data,
       submitted_at: new Date().toISOString(),
@@ -628,7 +733,7 @@ export class StorageService {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
       const currentSubs: Submission[] = raw ? JSON.parse(raw) : [];
-      const updated = [newSub, ...currentSubs];
+      const updated = [newSub, ...currentSubs.filter((s) => s.id !== newSub.id)];
       localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(updated));
 
       // Broadcast event for real-time dashboard/responses count updates
@@ -639,10 +744,24 @@ export class StorageService {
       console.warn('Failed to save submission to localStorage:', e);
     }
 
-    // 2. Persist to Supabase asynchronously with a timeout guard
+    // 2. Persist to Supabase with Foreign Key pre-check & timeout guard
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        // Ensure form row exists in Supabase so foreign key constraint NEVER rejects the submission
+        try {
+          await supabase.from('forms').upsert({
+            id: newSub.form_id,
+            owner_id: 'admin',
+            title: resolvedFormTitle,
+            slug: newSub.form_id,
+            status: 'published',
+            updated_at: new Date().toISOString(),
+          });
+        } catch (fkCheckErr) {
+          console.warn('Form upsert check error for foreign key:', fkCheckErr);
+        }
+
         const insertPromise = supabase.from('submissions').insert([
           {
             id: newSub.id,
@@ -656,7 +775,6 @@ export class StorageService {
           },
         ]);
 
-        // Don't let slow Supabase requests hang user submission
         const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 3500));
         await Promise.race([insertPromise, timeoutPromise]);
       } catch (err) {
@@ -851,4 +969,19 @@ TO authenticated
 WITH CHECK (bucket_id = 'event-assets');
 `;
   }
+}
+
+export function isSubmissionForForm(sub: Submission, form: Form): boolean {
+  if (!sub || !form) return false;
+  if (sub.form_id === form.id) return true;
+  if (form.slug && sub.form_id.toLowerCase() === form.slug.toLowerCase()) return true;
+
+  const cleanSub = (sub.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+  const cleanFormId = (form.id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+  const cleanSlug = (form.slug || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+
+  if (cleanSub !== '') {
+    if (cleanSub === cleanFormId || cleanSub === cleanSlug) return true;
+  }
+  return false;
 }
