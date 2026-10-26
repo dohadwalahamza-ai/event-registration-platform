@@ -14,6 +14,8 @@ import {
   Check,
 } from 'lucide-react';
 
+import { parseThemeConfig } from '../../services/storage';
+
 interface BrandingSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -28,7 +30,6 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   onSave,
 }) => {
   const [title, setTitle] = useState(form.title);
-  const [slug, setSlug] = useState(form.slug);
   const [description, setDescription] = useState(form.description);
   const [coverImageUrl, setCoverImageUrl] = useState(form.cover_image_url || '');
   const [eventDate, setEventDate] = useState(form.event_date || '');
@@ -38,22 +39,15 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   const [successMessage, setSuccessMessage] = useState(form.success_message);
   const [redirectUrl, setRedirectUrl] = useState(form.redirect_url || '');
   const [themeConfig, setThemeConfig] = useState<FormThemeConfig>(
-    form.theme_config || {
-      accentColor: '#4f46e5',
-      headerStyle: 'banner',
-      themeMode: 'light',
-      backgroundStyle: 'banner_glass',
-      borderRadius: 'xl',
-    }
+    parseThemeConfig(form.theme_config)
   );
   const [customBackgroundColor, setCustomBackgroundColor] = useState<string>(
-    form.theme_config?.customBackgroundColor || '#0f172a'
+    parseThemeConfig(form.theme_config).customBackgroundColor || '#0f172a'
   );
 
   useEffect(() => {
     if (isOpen) {
       setTitle(form.title);
-      setSlug(form.slug);
       setDescription(form.description);
       setCoverImageUrl(form.cover_image_url || '');
       setEventDate(form.event_date || '');
@@ -62,25 +56,8 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       setDeadline(form.registration_deadline || '');
       setSuccessMessage(form.success_message);
       setRedirectUrl(form.redirect_url || '');
-      const rawTheme = form.theme_config;
-      const parsedTheme: FormThemeConfig =
-        typeof rawTheme === 'string'
-          ? (() => {
-              try {
-                return JSON.parse(rawTheme);
-              } catch {
-                return {};
-              }
-            })()
-          : rawTheme || {};
-      setThemeConfig({
-        accentColor: parsedTheme.accentColor || '#4f46e5',
-        headerStyle: parsedTheme.headerStyle || 'banner',
-        themeMode: parsedTheme.themeMode || 'light',
-        backgroundStyle: parsedTheme.backgroundStyle || 'banner_glass',
-        borderRadius: parsedTheme.borderRadius || 'xl',
-        customBackgroundColor: parsedTheme.customBackgroundColor || '#0f172a',
-      });
+      const parsedTheme = parseThemeConfig(form.theme_config);
+      setThemeConfig(parsedTheme);
       setCustomBackgroundColor(parsedTheme.customBackgroundColor || '#0f172a');
     }
   }, [isOpen, form]);
@@ -206,7 +183,7 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
     onSave({
       ...form,
       title,
-      slug: slug.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+      slug: form.slug,
       description,
       cover_image_url: coverImageUrl,
       event_date: eventDate,
@@ -360,21 +337,7 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Public URL Slug
-            </label>
-            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-600">
-              <span className="text-xs text-slate-400 pl-3">/e/</span>
-              <input
-                type="text"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="event-slug"
-                className="w-full px-1 py-2 bg-transparent text-slate-800 text-xs font-mono focus:outline-none"
-              />
-            </div>
-          </div>
+
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">

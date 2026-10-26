@@ -1,6 +1,7 @@
 import React from 'react';
 import { Form, FormField } from '../../types';
 import { FieldRenderer } from './FieldRenderer';
+import { parseThemeConfig } from '../../services/storage';
 import {
   GripVertical,
   ChevronUp,
@@ -39,19 +40,10 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
   onOpenFieldLibrary,
 }) => {
   const fields = form.fields || [];
-  const rawTheme = form.theme_config;
-  const theme =
-    typeof rawTheme === 'string'
-      ? (() => {
-          try {
-            return JSON.parse(rawTheme);
-          } catch {
-            return {};
-          }
-        })()
-      : rawTheme || {};
+  const theme = parseThemeConfig(form.theme_config);
   const backgroundStyle = theme.backgroundStyle || 'banner_glass';
   const accentColor = theme.accentColor || '#4f46e5';
+  const customBackgroundColor = theme.customBackgroundColor || '#0f172a';
 
   const bannerImageUrl =
     form.cover_image_url && form.cover_image_url.trim() !== ''
@@ -85,7 +77,7 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
         };
       case 'solid_color':
         return {
-          backgroundColor: form.theme_config?.customBackgroundColor || '#0f172a',
+          backgroundColor: customBackgroundColor,
           backgroundImage: 'none',
         };
       case 'vibrant_gradient':

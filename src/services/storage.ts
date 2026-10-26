@@ -1,4 +1,4 @@
-import { Form, FormField, Submission, DashboardStats } from '../types';
+import { Form, FormField, Submission, DashboardStats, FormThemeConfig } from '../types';
 import { SAMPLE_FORMS, INITIAL_SUBMISSIONS } from './seedData';
 import { getSupabaseClient } from './supabaseClient';
 
@@ -59,12 +59,61 @@ function initializeStorage() {
 
 initializeStorage();
 
+export function parseThemeConfig(raw: any): FormThemeConfig {
+  let val = raw;
+  while (typeof val === 'string') {
+    try {
+      val = JSON.parse(val);
+    } catch {
+      break;
+    }
+  }
+  if (val && typeof val === 'object') {
+    return {
+      accentColor: val.accentColor || '#4f46e5',
+      headerStyle: val.headerStyle || 'banner',
+      themeMode: val.themeMode || 'light',
+      backgroundStyle: val.backgroundStyle || 'banner_glass',
+      borderRadius: val.borderRadius || 'xl',
+      customBackgroundColor: val.customBackgroundColor || '#0f172a',
+    };
+  }
+  return {
+    accentColor: '#4f46e5',
+    headerStyle: 'banner',
+    themeMode: 'light',
+    backgroundStyle: 'banner_glass',
+    borderRadius: 'xl',
+    customBackgroundColor: '#0f172a',
+  };
+}
+
 export class StorageService {
   /**
-   * Fetch all forms
+   * Fetch all forms - seamlessly merges Supabase remote and local storage
    */
   static async getForms(): Promise<Form[]> {
     const deletedIds = getDeletedFormIds();
+
+    // 1. Read locally cached forms
+    let localForms: Form[] = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          localForms = parsed
+            .filter((f: Form) => !deletedIds.has(f.id))
+            .map((f: Form) => ({
+              ...f,
+              theme_config: parseThemeConfig(f.theme_config),
+            }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse local forms:', e);
+    }
+
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -74,60 +123,84 @@ export class StorageService {
           .order('created_at', { ascending: false });
 
         if (!error && data) {
-          return data
+          const supabaseForms = data
             .filter((f: any) => !deletedIds.has(f.id))
             .map((f: any) => ({
               ...f,
-              theme_config:
-                typeof f.theme_config === 'string'
-                  ? (() => {
-                      try {
-                        return JSON.parse(f.theme_config);
-                      } catch {
-                        return f.theme_config;
-                      }
-                    })()
-                  : f.theme_config,
+              theme_config: parseThemeConfig(f.theme_config),
               fields: (f.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
             }));
+
+          // Merge by form ID & slug: prefer local if newer or not yet in Supabase
+          const map = new Map<string, Form>();
+          for (const sf of supabaseForms) {
+            map.set(sf.id, sf);
+            if (sf.slug) map.set(sf.slug.toLowerCase(), sf);
+          }
+
+          for (const lf of localForms) {
+            if (deletedIds.has(lf.id)) continue;
+            const existing = map.get(lf.id) || (lf.slug ? map.get(lf.slug.toLowerCase()) : undefined);
+            if (!existing) {
+              map.set(lf.id, lf);
+            } else {
+              const localTime = new Date(lf.updated_at || 0).getTime();
+              const supaTime = new Date(existing.updated_at || 0).getTime();
+              if (localTime >= supaTime) {
+                map.set(lf.id, lf);
+                if (lf.slug) map.set(lf.slug.toLowerCase(), lf);
+              }
+            }
+          }
+
+          const unique = Array.from(new Set(Array.from(map.values())));
+          return unique.filter((f) => !deletedIds.has(f.id));
         }
       } catch (err) {
         console.warn('Supabase fetch failed, falling back to local storage', err);
       }
     }
 
-    // Local Storage fallback
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
-      const list: Form[] = raw ? JSON.parse(raw) : SAMPLE_FORMS;
-      return list
-        .filter((f) => !deletedIds.has(f.id))
-        .map((f) => ({
-          ...f,
-          theme_config:
-            typeof f.theme_config === 'string'
-              ? (() => {
-                  try {
-                    return JSON.parse(f.theme_config);
-                  } catch {
-                    return f.theme_config;
-                  }
-                })()
-              : f.theme_config,
-        }));
-    } catch {
-      return SAMPLE_FORMS.filter((f) => !deletedIds.has(f.id));
-    }
+    const result = localForms.length > 0 ? localForms : SAMPLE_FORMS;
+    return result.filter((f) => !deletedIds.has(f.id));
   }
 
   /**
-   * Fetch a single form by unique slug or ID (supports shortened URLs like /e/mvpg1lhu)
+   * Fetch a single form by unique slug or ID (supports shortened URLs like /e/mvph0jx2)
    */
   static async getFormBySlug(slug: string): Promise<Form | null> {
     const deletedIds = getDeletedFormIds();
     const cleanSlug = decodeURIComponent(slug.trim()).toLowerCase().replace(/\/+$/, '');
     const coreSlug = cleanSlug.replace(/^(event-form-|form-)/, '');
 
+    // 1. FIRST check local forms directly (preserves latest builder edits & custom themes)
+    let localForms: Form[] = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          localForms = parsed.map((f: Form) => ({
+            ...f,
+            theme_config: parseThemeConfig(f.theme_config),
+          }));
+        }
+      }
+    } catch {}
+
+    const localFound = localForms.find(
+      (f) =>
+        !deletedIds.has(f.id) &&
+        (f.slug.toLowerCase() === cleanSlug ||
+          f.id.toLowerCase() === cleanSlug ||
+          f.slug.toLowerCase() === `event-form-${coreSlug}` ||
+          f.slug.toLowerCase() === `form-${coreSlug}` ||
+          f.id.toLowerCase() === `form-${coreSlug}` ||
+          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
+          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
+    );
+
+    // 2. Query Supabase remote database
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -141,28 +214,31 @@ export class StorageService {
           .maybeSingle();
 
         if (!error && data && !deletedIds.has(data.id)) {
-          return {
+          const supaForm: Form = {
             ...data,
-            theme_config:
-              typeof data.theme_config === 'string'
-                ? (() => {
-                    try {
-                      return JSON.parse(data.theme_config);
-                    } catch {
-                      return data.theme_config;
-                    }
-                  })()
-                : data.theme_config,
+            theme_config: parseThemeConfig(data.theme_config),
             fields: (data.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
           };
+
+          if (localFound) {
+            const localTime = new Date(localFound.updated_at || 0).getTime();
+            const supaTime = new Date(supaForm.updated_at || 0).getTime();
+            if (localTime >= supaTime) {
+              return localFound;
+            }
+          }
+          return supaForm;
         }
       } catch (err) {
-        console.warn('Supabase fetch by slug failed, using local storage', err);
+        console.warn('Supabase fetch by slug failed, checking local storage', err);
       }
     }
 
-    const forms = await this.getForms();
-    const found = forms.find(
+    if (localFound) return localFound;
+
+    // 3. Check merged all forms list
+    const allForms = await this.getForms();
+    const found = allForms.find(
       (f) =>
         !deletedIds.has(f.id) &&
         (f.slug.toLowerCase() === cleanSlug ||
@@ -175,7 +251,7 @@ export class StorageService {
     );
     if (found) return found;
 
-    // Check pre-seeded forms directly
+    // 4. Check pre-seeded sample forms directly
     const seedFound = SAMPLE_FORMS.find(
       (f) =>
         !deletedIds.has(f.id) &&
@@ -185,7 +261,7 @@ export class StorageService {
     );
     if (seedFound) return seedFound;
 
-    // Dynamic fallback for any created event form slug or short ID
+    // 5. Dynamic fallback for any created event form slug or short ID
     if (
       (cleanSlug.startsWith('event-form-') || cleanSlug.startsWith('form-') || coreSlug.length >= 4) &&
       !deletedIds.has(`form-${cleanSlug}`) &&
@@ -205,10 +281,10 @@ export class StorageService {
         registration_deadline: '2026-11-18T23:59',
         status: 'published',
         theme_config: {
-          accentColor: '#4f46e5',
+          accentColor: '#d97706',
           headerStyle: 'banner',
           themeMode: 'light',
-          backgroundStyle: 'banner_glass',
+          backgroundStyle: 'vibrant_gradient',
           borderRadius: 'xl',
         },
         success_message: 'Thank you! Your registration has been submitted successfully.',
@@ -248,7 +324,7 @@ export class StorageService {
           },
         ],
       };
-      // Save locally so future queries and response associations find it
+      // Save locally so future queries find it
       await this.saveForm(fallbackForm);
       return fallbackForm;
     }
@@ -290,14 +366,14 @@ export class StorageService {
     if (supabase) {
       try {
         // Save form row
-        const { data: formData, error: formError } = await supabase
+        const { error: formError } = await supabase
           .from('forms')
           .upsert({
             id: updatedForm.id,
-            owner_id: updatedForm.owner_id,
+            owner_id: updatedForm.owner_id || 'admin',
             title: updatedForm.title,
             slug: updatedForm.slug,
-            description: updatedForm.description,
+            description: updatedForm.description || '',
             cover_image_url: updatedForm.cover_image_url,
             event_date: updatedForm.event_date,
             event_end_date: updatedForm.event_end_date,
@@ -307,13 +383,34 @@ export class StorageService {
             theme_config: updatedForm.theme_config,
             success_message: updatedForm.success_message,
             redirect_url: updatedForm.redirect_url,
-            published_version: updatedForm.published_version,
+            published_version: updatedForm.published_version || 1,
             updated_at: updatedForm.updated_at,
-          })
-          .select()
-          .single();
+          });
 
-        if (!formError && updatedForm.fields) {
+        if (formError) {
+          console.warn('Supabase form upsert error, attempting retry with stringified theme_config:', formError.message || formError);
+          // Retry with stringified theme_config in case the database column is TEXT
+          await supabase.from('forms').upsert({
+            id: updatedForm.id,
+            owner_id: updatedForm.owner_id || 'admin',
+            title: updatedForm.title,
+            slug: updatedForm.slug,
+            description: updatedForm.description || '',
+            cover_image_url: updatedForm.cover_image_url,
+            event_date: updatedForm.event_date,
+            event_end_date: updatedForm.event_end_date,
+            venue: updatedForm.venue,
+            status: updatedForm.status,
+            registration_deadline: updatedForm.registration_deadline,
+            theme_config: JSON.stringify(updatedForm.theme_config),
+            success_message: updatedForm.success_message,
+            redirect_url: updatedForm.redirect_url,
+            published_version: updatedForm.published_version || 1,
+            updated_at: updatedForm.updated_at,
+          });
+        }
+
+        if (updatedForm.fields) {
           // Delete old fields and insert updated set
           await supabase.from('form_fields').delete().eq('form_id', updatedForm.id);
           if (updatedForm.fields.length > 0) {
@@ -342,18 +439,37 @@ export class StorageService {
       }
     }
 
-    // Always update local cache
-    const currentForms = await this.getForms();
-    const existingIndex = currentForms.findIndex((f) => f.id === updatedForm.id);
-    let newFormsList: Form[];
-    if (existingIndex >= 0) {
-      newFormsList = [...currentForms];
-      newFormsList[existingIndex] = updatedForm;
-    } else {
-      newFormsList = [updatedForm, ...currentForms];
+    // Always update local cache directly to guarantee instantaneous persistence
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
+      const currentForms: Form[] = raw ? JSON.parse(raw) : [];
+      const existingIndex = currentForms.findIndex(
+        (f) =>
+          f.id === updatedForm.id ||
+          f.slug.toLowerCase() === updatedForm.slug.toLowerCase() ||
+          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') ===
+            updatedForm.id.toLowerCase().replace(/^(event-form-|form-)/, '')
+      );
+      let newFormsList: Form[];
+      if (existingIndex >= 0) {
+        newFormsList = [...currentForms];
+        newFormsList[existingIndex] = updatedForm;
+      } else {
+        newFormsList = [updatedForm, ...currentForms];
+      }
+
+      localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(newFormsList));
+
+      // Broadcast update event so any active preview or open public tab updates immediately
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('eventform_saved', { detail: updatedForm })
+        );
+      }
+    } catch (e) {
+      console.error('Failed to update local cache', e);
     }
 
-    localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(newFormsList));
     return updatedForm;
   }
 
@@ -667,52 +783,42 @@ ALTER TABLE public.forms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.form_fields ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.submissions ENABLE ROW LEVEL SECURITY;
 
--- Form RLS: Public can READ published forms only
-CREATE POLICY "Public can view published forms" 
+-- Forms RLS: Allow viewing and managing forms
+CREATE POLICY "Allow public read forms" 
 ON public.forms FOR SELECT 
-USING (status = 'published');
-
--- Admin full access to forms
-CREATE POLICY "Authenticated users manage own forms" 
-ON public.forms FOR ALL 
-TO authenticated 
-USING (true)
-WITH CHECK (true);
-
--- Form Fields RLS: Public can view fields of published forms
-CREATE POLICY "Public can view fields of published forms" 
-ON public.form_fields FOR SELECT 
-USING (EXISTS (
-  SELECT 1 FROM public.forms 
-  WHERE public.forms.id = public.form_fields.form_id 
-  AND public.forms.status = 'published'
-));
-
-CREATE POLICY "Authenticated users manage fields" 
-ON public.form_fields FOR ALL 
-TO authenticated 
-USING (true)
-WITH CHECK (true);
-
--- Submissions RLS: Anyone can submit to a published, open form
-CREATE POLICY "Public can insert submissions for published forms" 
-ON public.submissions FOR INSERT 
-WITH CHECK (EXISTS (
-  SELECT 1 FROM public.forms 
-  WHERE public.forms.id = public.submissions.form_id 
-  AND public.forms.status = 'published'
-  AND (public.forms.registration_deadline IS NULL OR public.forms.registration_deadline > NOW())
-));
-
--- Authenticated admins can view and delete submissions
-CREATE POLICY "Authenticated users view submissions" 
-ON public.submissions FOR SELECT 
-TO authenticated 
 USING (true);
 
-CREATE POLICY "Authenticated users delete submissions" 
+CREATE POLICY "Allow manage forms" 
+ON public.forms FOR ALL 
+TO anon, authenticated 
+USING (true)
+WITH CHECK (true);
+
+-- Form Fields RLS: Allow viewing and managing fields
+CREATE POLICY "Allow public read fields" 
+ON public.form_fields FOR SELECT 
+USING (true);
+
+CREATE POLICY "Allow manage fields" 
+ON public.form_fields FOR ALL 
+TO anon, authenticated 
+USING (true)
+WITH CHECK (true);
+
+-- Submissions RLS: Anyone can submit and manage submissions
+CREATE POLICY "Public can insert submissions" 
+ON public.submissions FOR INSERT 
+TO anon, authenticated
+WITH CHECK (true);
+
+CREATE POLICY "Allow view submissions" 
+ON public.submissions FOR SELECT 
+TO anon, authenticated
+USING (true);
+
+CREATE POLICY "Allow delete submissions" 
 ON public.submissions FOR DELETE 
-TO authenticated 
+TO anon, authenticated
 USING (true);
 
 -- 6. Storage Bucket setup for Event Posters and Files

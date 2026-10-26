@@ -6,7 +6,7 @@ import {
   validateFormSubmission,
   sanitizeSubmissionData,
 } from '../conditional-logic/evaluator';
-import { StorageService } from '../../services/storage';
+import { StorageService, parseThemeConfig } from '../../services/storage';
 import {
   Calendar,
   Clock,
@@ -40,21 +40,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
   const [submissionId, setSubmissionId] = useState<string | null>(null);
 
   const fields = form.fields || [];
-  const rawTheme = form.theme_config;
-  const theme: FormThemeConfig =
-    typeof rawTheme === 'string'
-      ? (() => {
-          try {
-            return JSON.parse(rawTheme);
-          } catch {
-            return {};
-          }
-        })()
-      : rawTheme || {
-          accentColor: '#4f46e5',
-          headerStyle: 'banner',
-          borderRadius: 'xl',
-        };
+  const theme: FormThemeConfig = parseThemeConfig(form.theme_config);
 
   // Check if deadline passed
   const isDeadlinePassed =
@@ -225,6 +211,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
 
   const accentColor = theme.accentColor || '#4f46e5';
   const backgroundStyle = theme.backgroundStyle || 'banner_glass';
+  const customBackgroundColor = theme.customBackgroundColor || '#0f172a';
 
   // Guaranteed banner image URL with reliable high-resolution sports/event fallback
   const bannerImageUrl =
@@ -249,7 +236,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
       : '2026-11-18T23:59';
 
   // Dynamic background atmosphere styling based on themeConfig.backgroundStyle
-  const getThemeAtmosphere = (bg: string, accent: string) => {
+  const getThemeAtmosphere = (bg: string, accent: string, customBg: string) => {
     switch (bg) {
       case 'banner_glass':
         return {
@@ -274,7 +261,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           isSolidColor: true,
           wrapperClass: 'text-slate-900',
           wrapperStyle: {
-            backgroundColor: theme.customBackgroundColor || '#0f172a',
+            backgroundColor: customBg,
             backgroundImage: 'none',
           },
           cardClass: 'bg-white border-slate-200 text-slate-900 shadow-2xl',
@@ -290,6 +277,9 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           wrapperStyle: {
             backgroundColor: '#0f172a',
             backgroundImage: `linear-gradient(135deg, ${accent} 0%, #1e1b4b 50%, #0f172a 100%)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed',
           },
           cardClass: 'bg-white/95 border-white/40 text-slate-900 shadow-2xl backdrop-blur-md',
           headingClass: 'text-slate-900',
@@ -304,6 +294,9 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           wrapperStyle: {
             backgroundColor: '#090d16',
             backgroundImage: `radial-gradient(ellipse 90% 50% at 50% -10%, ${accent}35 0%, transparent 70%), radial-gradient(circle at 100% 100%, ${accent}20 0%, transparent 45%)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed',
           },
           cardClass: 'bg-slate-900/95 border-slate-800 text-slate-100 shadow-2xl',
           headingClass: 'text-white',
@@ -318,6 +311,9 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           wrapperStyle: {
             backgroundColor: '#fff7ed',
             backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #f59e0b25 0%, transparent 70%), linear-gradient(135deg, #fff7ed 0%, #fef3c7 50%, #fed7aa 100%)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed',
           },
           cardClass: 'bg-white border-amber-200/80 text-slate-900 shadow-md',
           headingClass: 'text-slate-900',
@@ -332,6 +328,9 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           wrapperStyle: {
             backgroundColor: '#f0fdf4',
             backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #05966925 0%, transparent 70%), linear-gradient(135deg, #f0fdf4 0%, #d1fae5 50%, #a7f3d0 100%)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed',
           },
           cardClass: 'bg-white border-emerald-200/80 text-slate-900 shadow-md',
           headingClass: 'text-slate-900',
@@ -346,6 +345,9 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           wrapperStyle: {
             backgroundColor: '#f0f9ff',
             backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #0284c725 0%, transparent 70%), linear-gradient(135deg, #f0f9ff 0%, #bae6fd 50%, #e0e7ff 100%)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed',
           },
           cardClass: 'bg-white border-sky-200/80 text-slate-900 shadow-md',
           headingClass: 'text-slate-900',
@@ -374,6 +376,9 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           wrapperStyle: {
             backgroundColor: '#f1f5f9',
             backgroundImage: `radial-gradient(ellipse 90% 50% at 50% -15%, ${accent}28 0%, transparent 75%), radial-gradient(circle at 100% 100%, ${accent}12 0%, transparent 40%)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed',
           },
           cardClass: 'bg-white border-slate-200/90 text-slate-900 shadow-md',
           headingClass: 'text-slate-900',
@@ -385,7 +390,34 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     }
   };
 
-  const atmosphere = getThemeAtmosphere(backgroundStyle, accentColor);
+  const atmosphere = getThemeAtmosphere(backgroundStyle, accentColor, customBackgroundColor);
+
+  // Synchronize document body background with the active event theme atmosphere
+  useEffect(() => {
+    const prevBg = document.body.style.backgroundColor;
+    const prevImage = document.body.style.backgroundImage;
+    const prevAttachment = document.body.style.backgroundAttachment;
+    const prevSize = document.body.style.backgroundSize;
+
+    if (atmosphere.wrapperStyle.backgroundColor) {
+      document.body.style.backgroundColor = atmosphere.wrapperStyle.backgroundColor;
+    }
+    if (atmosphere.wrapperStyle.backgroundImage && atmosphere.wrapperStyle.backgroundImage !== 'none') {
+      document.body.style.backgroundImage = atmosphere.wrapperStyle.backgroundImage;
+      document.body.style.backgroundAttachment = 'fixed';
+      document.body.style.backgroundSize = 'cover';
+      document.body.style.backgroundPosition = 'center';
+    } else {
+      document.body.style.backgroundImage = 'none';
+    }
+
+    return () => {
+      document.body.style.backgroundColor = prevBg;
+      document.body.style.backgroundImage = prevImage;
+      document.body.style.backgroundAttachment = prevAttachment;
+      document.body.style.backgroundSize = prevSize;
+    };
+  }, [atmosphere]);
 
   // ACTIVE REGISTRATION FORM
   return (

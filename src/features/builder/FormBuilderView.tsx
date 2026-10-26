@@ -340,13 +340,6 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
           }
           onOpenLivePublicPage(form.slug);
         }}
-        onUpdateSlug={async (newSlug: string) => {
-          const updated = { ...form, slug: newSlug };
-          setForm(updated);
-          await onSaveForm(updated);
-          setHasUnsavedChanges(false);
-          success('Slug Updated', `Public URL is now /#/e/${newSlug}`);
-        }}
       />
     </div>
   );

@@ -160,6 +160,41 @@ function AppContent() {
     };
   }, [publicSlug]);
 
+  // Reactive listener for form saves across the builder and public preview
+  useEffect(() => {
+    const handleSaved = (e: any) => {
+      const updated: Form = e.detail;
+      if (updated) {
+        setForms((prev) => {
+          const idx = prev.findIndex((f) => f.id === updated.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = updated;
+            return next;
+          }
+          return [updated, ...prev];
+        });
+
+        if (publicSlug) {
+          const clean = publicSlug.toLowerCase().replace(/^(event-form-|form-)/, '');
+          const updatedCore = (updated.slug || updated.id).toLowerCase().replace(/^(event-form-|form-)/, '');
+          if (
+            updated.slug.toLowerCase() === publicSlug.toLowerCase() ||
+            updated.id.toLowerCase() === publicSlug.toLowerCase() ||
+            clean === updatedCore
+          ) {
+            setPublicForm(updated);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('eventform_saved', handleSaved);
+    return () => {
+      window.removeEventListener('eventform_saved', handleSaved);
+    };
+  }, [publicSlug]);
+
   // Compute response counts per form
   const responseCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};

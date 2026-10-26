@@ -13,8 +13,6 @@ import {
   Scissors,
   MessageCircle,
   Download,
-  Edit2,
-  Save,
   Sparkles,
 } from 'lucide-react';
 import { Badge } from '../../generic-ui/components/Badge';
@@ -35,72 +33,53 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
   form,
   onUpdateStatus,
   onOpenLivePreview,
-  onUpdateSlug,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [copiedShort, setCopiedShort] = useState(false);
   const [showQr, setShowQr] = useState(false);
-  const [isEditingSlug, setIsEditingSlug] = useState(false);
-  const [customSlug, setCustomSlug] = useState('');
-  const [isSavingSlug, setIsSavingSlug] = useState(false);
-  const [useShortUrl, setUseShortUrl] = useState(true);
-  const { success, error } = useToast();
+  const [tinyUrl, setTinyUrl] = useState<string>('');
+  const [isLoadingTiny, setIsLoadingTiny] = useState(false);
+  const { success } = useToast();
 
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://eventform.vercel.app';
-  
-  // Clean short slug (e.g. strips "event-form-" or "form-")
-  const shortSlug = form.slug.replace(/^(event-form-|form-)/, '');
-  const standardUrl = `${baseUrl}/#/e/${form.slug}`;
-  const shortUrl = `${baseUrl}/#/e/${shortSlug}`;
-  const activeShareUrl = useShortUrl ? shortUrl : standardUrl;
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://event.khargharjamaat.org';
 
+  // Clean short code: strips 'event-form-' or 'form-' prefix
+  const shortCode = (form.slug || form.id).replace(/^(event-form-|form-)/, '');
+  const domainShortUrl = `${baseUrl}/#/e/${shortCode}`;
+
+  // Automatically fetch an ultra-short TinyURL link when opened
   useEffect(() => {
     if (isOpen) {
-      setCustomSlug(form.slug.replace(/^(event-form-|form-)/, ''));
-      setIsEditingSlug(false);
+      setIsLoadingTiny(true);
+      fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(domainShortUrl)}`)
+        .then((res) => res.text())
+        .then((text) => {
+          if (text && text.trim().startsWith('http')) {
+            setTinyUrl(text.trim());
+          }
+        })
+        .catch(() => {
+          // fallback to clean domain short url
+        })
+        .finally(() => {
+          setIsLoadingTiny(false);
+        });
     }
-  }, [isOpen, form.slug]);
+  }, [isOpen, domainShortUrl]);
 
-  const handleCopyLink = (url: string, isShort = false) => {
+  // Primary short URL for 1-click sharing
+  const activeShortUrl = tinyUrl || domainShortUrl;
+
+  const handleCopyLink = (url: string) => {
     navigator.clipboard.writeText(url);
-    if (isShort) {
-      setCopiedShort(true);
-      setTimeout(() => setCopiedShort(false), 2500);
-    } else {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    }
-    success('Link Copied!', 'Registration link copied to clipboard.');
-  };
-
-  const handleSaveCustomSlug = async () => {
-    if (!customSlug.trim()) {
-      error('Invalid Slug', 'Please enter a valid URL slug.');
-      return;
-    }
-    const clean = customSlug
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9-_]/g, '-');
-
-    setIsSavingSlug(true);
-    try {
-      if (onUpdateSlug) {
-        await onUpdateSlug(clean);
-      }
-      setIsEditingSlug(false);
-      success('Short URL Saved', `Short link is now /#/e/${clean}`);
-    } catch {
-      error('Update Failed', 'Could not save the new URL slug.');
-    } finally {
-      setIsSavingSlug(false);
-    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+    success('Short Link Copied!', 'Short URL is copied to clipboard.');
   };
 
   const handleWhatsAppShare = () => {
     const venueText = form.venue ? `\n📍 Venue: ${form.venue}` : '';
-    const dateText = form.event_date ? `\n📅 Date: ${new Date(form.event_date).toLocaleDateString()}` : '';
-    const text = `🏸 *Event Registration is Open!*\n\n*${form.title}*${dateText}${venueText}\n\n👉 *Register online here:*\n${activeShareUrl}`;
+    const dateText = form.event_date ? `\n📅 Date: ${new Date(form.event_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}` : '';
+    const text = `🏸 *Event Registration is Open!*\n\n*${form.title}*${dateText}${venueText}\n\n👉 *Register online here:*\n${activeShortUrl}`;
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(whatsappUrl, '_blank');
   };
@@ -111,26 +90,26 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
         await navigator.share({
           title: form.title,
           text: `Register for ${form.title}:`,
-          url: activeShareUrl,
+          url: activeShortUrl,
         });
       } catch {
         // user cancelled share
       }
     } else {
-      handleCopyLink(activeShareUrl);
+      handleCopyLink(activeShortUrl);
     }
   };
 
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
-    activeShareUrl
+    activeShortUrl
   )}`;
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Publish & Share Event Registration"
-      description="Share your event link, generate a shortened URL, or send invitations on WhatsApp."
+      title="Share Shortened Event Link"
+      description="Easily share your registration link on WhatsApp, SMS, posters, or social media."
       maxWidth="lg"
     >
       <div className="space-y-5 text-sm">
@@ -191,8 +170,8 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
           </div>
         </div>
 
-        {/* Shortened URL Option Card */}
-        <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-100 space-y-3">
+        {/* Shortened URL Card */}
+        <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-indigo-600 text-white">
@@ -200,106 +179,54 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
               </div>
               <div>
                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                  Shortened Public URL
+                  Shortened Registration Link
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  Compact & clean link for WhatsApp, SMS, and banners
+                  Ready to copy and share anywhere
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setUseShortUrl(true)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  useShortUrl
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Short Link
-              </button>
-              <button
-                type="button"
-                onClick={() => setUseShortUrl(false)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  !useShortUrl
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Full Link
-              </button>
-            </div>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-white px-2.5 py-1 rounded-full border border-indigo-200 shadow-2xs">
+              <Sparkles className="w-3 h-3 text-indigo-600" />
+              {tinyUrl ? 'Ultra-Short URL' : 'Domain Short URL'}
+            </span>
           </div>
 
           {/* Active URL box */}
           <div className="flex items-center gap-2">
             <div className="flex-1 flex items-center px-3.5 py-2.5 bg-white border border-indigo-200 rounded-xl text-xs font-mono text-indigo-950 truncate select-all shadow-2xs">
               <Globe className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
-              <span className="truncate font-semibold">{activeShareUrl}</span>
+              <span className="truncate font-semibold">{activeShortUrl}</span>
             </div>
 
             <Button
               variant="primary"
               size="sm"
-              onClick={() => handleCopyLink(activeShareUrl, true)}
+              onClick={() => handleCopyLink(activeShortUrl)}
               leftIcon={
-                copiedShort ? (
+                copied ? (
                   <Check className="w-4 h-4 text-white" />
                 ) : (
                   <Copy className="w-4 h-4" />
                 )
               }
             >
-              {copiedShort ? 'Copied!' : 'Copy'}
+              {copied ? 'Copied!' : 'Copy Link'}
             </Button>
           </div>
 
-          {/* Custom Short Slug Tool */}
-          {onUpdateSlug && (
-            <div className="pt-2 border-t border-indigo-100 flex flex-wrap items-center justify-between gap-2 text-xs">
-              {!isEditingSlug ? (
-                <div className="flex items-center gap-2 text-slate-600">
-                  <span>Current short slug: <code className="font-mono bg-white px-2 py-0.5 rounded-md border border-slate-200 font-bold text-slate-800">/e/{shortSlug}</code></span>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingSlug(true)}
-                    className="flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Customize</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 w-full animate-fade-in">
-                  <span className="text-slate-500 font-mono text-[11px]">/e/</span>
-                  <input
-                    type="text"
-                    value={customSlug}
-                    onChange={(e) => setCustomSlug(e.target.value)}
-                    placeholder="e.g. kpcl-2026, match1"
-                    className="flex-1 px-3 py-1.5 bg-white border border-indigo-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleSaveCustomSlug}
-                    isLoading={isSavingSlug}
-                    leftIcon={<Save className="w-3.5 h-3.5" />}
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsEditingSlug(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              )}
+          {/* If tinyUrl is ready, also provide the domain direct short link as an option */}
+          {tinyUrl && (
+            <div className="pt-2 border-t border-indigo-100/80 flex items-center justify-between text-xs text-slate-600">
+              <span className="truncate text-[11px] text-slate-500">Direct Domain Link: <code className="font-mono text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">{domainShortUrl}</code></span>
+              <button
+                type="button"
+                onClick={() => handleCopyLink(domainShortUrl)}
+                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer shrink-0 ml-2"
+              >
+                Copy Direct
+              </button>
             </div>
           )}
         </div>
@@ -355,7 +282,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
             </div>
             <a
               href={qrCodeUrl}
-              download={`${form.slug}-qr-code.png`}
+              download={`${shortCode}-qr-code.png`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 shadow-2xs"

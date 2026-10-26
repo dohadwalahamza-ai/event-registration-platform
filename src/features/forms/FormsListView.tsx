@@ -560,11 +560,6 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
             setSharingForm({ ...sharingForm, status: newStatus });
           }}
           onOpenLivePreview={() => onOpenPublicUrl(sharingForm.slug)}
-          onUpdateSlug={async (newSlug: string) => {
-            const updated = { ...sharingForm, slug: newSlug };
-            await StorageService.saveForm(updated);
-            setSharingForm(updated);
-          }}
         />
       )}
     </div>
