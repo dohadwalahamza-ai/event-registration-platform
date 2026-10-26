@@ -361,7 +361,16 @@ function AppContent() {
     }
 
     // Use loaded publicForm, or fallback to in-memory forms list
-    const formToRender = publicForm || forms.find((f) => f.slug.toLowerCase() === publicSlug.toLowerCase());
+    const cleanPublic = publicSlug.toLowerCase().replace(/^(event-form-|form-)/, '');
+    const formToRender =
+      publicForm ||
+      forms.find(
+        (f) =>
+          f.slug.toLowerCase() === publicSlug.toLowerCase() ||
+          f.id.toLowerCase() === publicSlug.toLowerCase() ||
+          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === cleanPublic ||
+          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === cleanPublic
+      );
 
     if (!formToRender) {
       return (

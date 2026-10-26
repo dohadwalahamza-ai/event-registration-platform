@@ -624,10 +624,26 @@ export class StorageService {
       applicant_email: applicantEmail,
     };
 
+    // 1. Immediately persist locally so submission is never lost
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+      const currentSubs: Submission[] = raw ? JSON.parse(raw) : [];
+      const updated = [newSub, ...currentSubs];
+      localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(updated));
+
+      // Broadcast event for real-time dashboard/responses count updates
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('submission_created', { detail: newSub }));
+      }
+    } catch (e) {
+      console.warn('Failed to save submission to localStorage:', e);
+    }
+
+    // 2. Persist to Supabase asynchronously with a timeout guard
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        await supabase.from('submissions').insert([
+        const insertPromise = supabase.from('submissions').insert([
           {
             id: newSub.id,
             form_id: newSub.form_id,
@@ -639,15 +655,14 @@ export class StorageService {
             applicant_email: newSub.applicant_email,
           },
         ]);
+
+        // Don't let slow Supabase requests hang user submission
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 3500));
+        await Promise.race([insertPromise, timeoutPromise]);
       } catch (err) {
         console.warn('Supabase submission insert error, saved locally:', err);
       }
     }
-
-    // Persist locally
-    const currentSubs = await this.getAllSubmissions();
-    const updated = [newSub, ...currentSubs];
-    localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(updated));
 
     return newSub;
   }

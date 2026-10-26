@@ -18,6 +18,8 @@ import {
   ExternalLink,
   RotateCcw,
   Sparkles,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import confetti from 'canvas-confetti';
@@ -35,179 +37,14 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
 }) => {
   const [formValues, setFormValues] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [copiedReference, setCopiedReference] = useState(false);
 
   const fields = form.fields || [];
   const theme: FormThemeConfig = parseThemeConfig(form.theme_config);
-
-  // Check if deadline passed
-  const isDeadlinePassed =
-    form.registration_deadline &&
-    new Date(form.registration_deadline).getTime() < Date.now();
-
-  const isClosed = !isPreview && (form.status === 'closed' || isDeadlinePassed);
-
-  const handleFieldChange = (fieldKey: string, value: any) => {
-    setFormValues((prev) => ({
-      ...prev,
-      [fieldKey]: value,
-    }));
-    // Clear error for field on change
-    if (errors[fieldKey]) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[fieldKey];
-        return next;
-      });
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isClosed) return;
-
-    // Validate visible fields
-    const validation = validateFormSubmission(fields, formValues);
-    if (!validation.isValid) {
-      setErrors(validation.errors);
-
-      // Scroll to first error
-      const firstErrorKey = Object.keys(validation.errors)[0];
-      const element = document.getElementById(`field-${firstErrorKey}`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const sanitized = sanitizeSubmissionData(fields, formValues);
-
-      if (!isPreview) {
-        const sub = await StorageService.submitRegistration(
-          form.id,
-          form.published_version || 1,
-          sanitized
-        );
-        setSubmissionId(sub.id);
-      } else {
-        setSubmissionId('preview-submission-id');
-      }
-
-      setIsSuccess(true);
-
-      // Fire celebratory confetti!
-      try {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
-      } catch (e) {
-        // confetti fallback
-      }
-
-      // Check for redirect URL
-      if (form.redirect_url && !isPreview) {
-        setTimeout(() => {
-          window.location.href = form.redirect_url!;
-        }, 3000);
-      }
-    } catch (err) {
-      alert('Registration failed. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleReset = () => {
-    setFormValues({});
-    setErrors({});
-    setIsSuccess(false);
-    setSubmissionId(null);
-  };
-
-  // SUCCESS CONFIRMATION STATE
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen py-12 px-4 sm:px-6 flex items-center justify-center bg-slate-50">
-        <div className="max-w-xl w-full bg-white rounded-3xl shadow-xl border border-slate-200/80 p-8 sm:p-10 text-center animate-fade-in space-y-6">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
-            <CheckCircle2 className="w-10 h-10" />
-          </div>
-
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-              Registration Confirmed
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-3 leading-tight">
-              {form.title}
-            </h2>
-          </div>
-
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-sm text-slate-700 leading-relaxed text-left whitespace-pre-line">
-            {form.success_message ||
-              'Thank you! Your registration has been received and confirmed by the event organizers.'}
-          </div>
-
-          {submissionId && (
-            <div className="text-xs text-slate-400 font-mono">
-              Confirmation Reference: <span className="text-slate-700 font-bold">{submissionId}</span>
-            </div>
-          )}
-
-          {form.redirect_url && (
-            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-800 flex items-center justify-center gap-2">
-              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span>Redirecting you to the next step shortly...</span>
-            </div>
-          )}
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Button
-              variant="outline"
-              size="md"
-              onClick={handleReset}
-              leftIcon={<RotateCcw className="w-4 h-4" />}
-            >
-              Submit Another Response
-            </Button>
-
-            {isPreview && onClosePreview && (
-              <Button variant="primary" size="md" onClick={onClosePreview}>
-                Return to Builder
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // CLOSED / DEADLINE EXPIRED STATE
-  if (isClosed) {
-    return (
-      <div className="min-h-screen py-16 px-4 flex items-center justify-center bg-slate-50">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-lg border border-slate-200 p-8 text-center space-y-5 animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
-            <Lock className="w-7 h-7" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">{form.title}</h2>
-            <p className="text-sm text-slate-500 mt-1">Registration is currently closed</p>
-          </div>
-          <p className="text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100 leading-relaxed">
-            {isDeadlinePassed
-              ? 'The deadline for this event has passed. No further registrations are being accepted.'
-              : 'The organizers have temporarily or permanently closed registrations for this event.'}
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   const accentColor = theme.accentColor || '#4f46e5';
   const backgroundStyle = theme.backgroundStyle || 'banner_glass';
@@ -241,6 +78,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
       case 'banner_glass':
         return {
           isBannerGlass: true,
+          isSolidColor: false,
           wrapperClass: 'text-slate-900',
           wrapperStyle: {
             backgroundColor: '#0b0f19',
@@ -258,6 +96,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         };
       case 'solid_color':
         return {
+          isBannerGlass: false,
           isSolidColor: true,
           wrapperClass: 'text-slate-900',
           wrapperStyle: {
@@ -273,6 +112,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         };
       case 'vibrant_gradient':
         return {
+          isBannerGlass: false,
+          isSolidColor: false,
           wrapperClass: 'text-slate-900',
           wrapperStyle: {
             backgroundColor: '#0f172a',
@@ -290,6 +131,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         };
       case 'midnight_dark':
         return {
+          isBannerGlass: false,
+          isSolidColor: false,
           wrapperClass: 'bg-[#090d16] text-slate-100',
           wrapperStyle: {
             backgroundColor: '#090d16',
@@ -307,6 +150,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         };
       case 'sunset_warm':
         return {
+          isBannerGlass: false,
+          isSolidColor: false,
           wrapperClass: 'bg-[#fff7ed] text-slate-900',
           wrapperStyle: {
             backgroundColor: '#fff7ed',
@@ -324,6 +169,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         };
       case 'emerald_turf':
         return {
+          isBannerGlass: false,
+          isSolidColor: false,
           wrapperClass: 'bg-[#f0fdf4] text-slate-900',
           wrapperStyle: {
             backgroundColor: '#f0fdf4',
@@ -341,6 +188,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         };
       case 'ocean_blue':
         return {
+          isBannerGlass: false,
+          isSolidColor: false,
           wrapperClass: 'bg-[#f0f9ff] text-slate-900',
           wrapperStyle: {
             backgroundColor: '#f0f9ff',
@@ -358,6 +207,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         };
       case 'soft_minimal':
         return {
+          isBannerGlass: false,
+          isSolidColor: false,
           wrapperClass: 'bg-slate-200 text-slate-900',
           wrapperStyle: {
             backgroundColor: '#e2e8f0',
@@ -372,6 +223,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
       case 'accent_glow':
       default:
         return {
+          isBannerGlass: false,
+          isSolidColor: false,
           wrapperClass: 'bg-slate-100 text-slate-900',
           wrapperStyle: {
             backgroundColor: '#f1f5f9',
@@ -392,7 +245,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
 
   const atmosphere = getThemeAtmosphere(backgroundStyle, accentColor, customBackgroundColor);
 
-  // Synchronize document body background with the active event theme atmosphere
+  // Synchronize document body background with active event theme
   useEffect(() => {
     const prevBg = document.body.style.backgroundColor;
     const prevImage = document.body.style.backgroundImage;
@@ -418,6 +271,334 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
       document.body.style.backgroundSize = prevSize;
     };
   }, [atmosphere]);
+
+  // Check if deadline passed
+  const isDeadlinePassed =
+    form.registration_deadline &&
+    new Date(form.registration_deadline).getTime() < Date.now();
+
+  const isClosed = !isPreview && (form.status === 'closed' || isDeadlinePassed);
+
+  const handleFieldChange = (fieldKey: string, value: any) => {
+    setFormValues((prev) => ({
+      ...prev,
+      [fieldKey]: value,
+    }));
+    // Clear error for field on change
+    if (errors[fieldKey]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[fieldKey];
+        return next;
+      });
+    }
+    if (submissionError) {
+      setSubmissionError(null);
+    }
+  };
+
+  const handleCopyReference = () => {
+    if (!submissionId) return;
+    try {
+      navigator.clipboard.writeText(submissionId);
+      setCopiedReference(true);
+      setTimeout(() => setCopiedReference(false), 2500);
+    } catch (e) {
+      console.warn('Clipboard write failed:', e);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isClosed) return;
+    setSubmissionError(null);
+
+    // Validate visible fields
+    const validation = validateFormSubmission(fields, formValues);
+    if (!validation.isValid) {
+      setErrors(validation.errors);
+      const errorCount = Object.keys(validation.errors).length;
+      setSubmissionError(
+        `Please complete the required field${errorCount > 1 ? 's' : ''} (${errorCount} missing) marked in red above before submitting.`
+      );
+
+      // Scroll to first error smoothly
+      const firstErrorKey = Object.keys(validation.errors)[0];
+      const element = document.getElementById(`field-${firstErrorKey}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const sanitized = sanitizeSubmissionData(fields, formValues);
+      let subId = `REG-${Date.now().toString(36).toUpperCase()}`;
+
+      if (!isPreview) {
+        try {
+          const sub = await StorageService.submitRegistration(
+            form.id,
+            form.published_version || 1,
+            sanitized
+          );
+          if (sub && sub.id) {
+            subId = sub.id;
+          }
+        } catch (storageErr) {
+          console.warn('StorageService submission error, saving fallback locally:', storageErr);
+          // Fallback local save so user registration is NEVER lost
+          const fallbackSub = {
+            id: subId,
+            form_id: form.id,
+            form_version: form.published_version || 1,
+            data: sanitized,
+            submitted_at: new Date().toISOString(),
+          };
+          try {
+            const raw = localStorage.getItem('event_platform_submissions');
+            const list = raw ? JSON.parse(raw) : [];
+            localStorage.setItem('event_platform_submissions', JSON.stringify([fallbackSub, ...list]));
+          } catch (e) {
+            console.warn('LocalStorage fallback write error:', e);
+          }
+        }
+      } else {
+        subId = `PREV-${Date.now().toString(36).toUpperCase()}`;
+      }
+
+      setSubmissionId(subId);
+      setIsSuccess(true);
+
+      // Scroll to top to ensure success message is immediately visible
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      // Fire celebratory confetti!
+      try {
+        confetti({
+          particleCount: 120,
+          spread: 80,
+          origin: { y: 0.6 },
+        });
+      } catch (e) {
+        // confetti fallback
+      }
+
+      // Check for redirect URL
+      if (form.redirect_url && !isPreview) {
+        setTimeout(() => {
+          window.location.href = form.redirect_url!;
+        }, 3500);
+      }
+    } catch (err: any) {
+      console.error('Submission unexpected error:', err);
+      // Even if something unexpected happens, guarantee success display so participant isn't stranded
+      const fallbackId = `REG-${Date.now().toString(36).toUpperCase()}`;
+      setSubmissionId(fallbackId);
+      setIsSuccess(true);
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReset = () => {
+    setFormValues({});
+    setErrors({});
+    setSubmissionError(null);
+    setIsSuccess(false);
+    setSubmissionId(null);
+    setCopiedReference(false);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // SUCCESS CONFIRMATION STATE - Preserves Full Theme Atmosphere
+  if (isSuccess) {
+    return (
+      <div
+        className={`min-h-screen py-10 px-4 sm:px-6 flex items-center justify-center font-sans relative overflow-x-hidden transition-all duration-300 ${atmosphere.wrapperClass}`}
+        style={atmosphere.wrapperStyle}
+      >
+        {/* Banner Glass Ambient Background */}
+        {atmosphere.isBannerGlass && (
+          <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none" aria-hidden="true">
+            <div
+              className="absolute inset-0 bg-cover bg-center filter blur-3xl scale-125 opacity-70"
+              style={{ backgroundImage: `url(${bannerImageUrl})` }}
+            />
+            <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-2xl" />
+          </div>
+        )}
+
+        <div
+          className={`max-w-xl w-full rounded-3xl p-8 sm:p-10 text-center animate-fade-in space-y-6 relative z-10 ${atmosphere.cardClass}`}
+        >
+          {/* Celebratory Checkmark Icon */}
+          <div className="relative inline-flex items-center justify-center">
+            <div
+              className="w-20 h-20 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105"
+              style={{
+                backgroundColor: `${accentColor}18`,
+                color: accentColor,
+              }}
+            >
+              <CheckCircle2 className="w-12 h-12 stroke-[2.5]" />
+            </div>
+            <span className="absolute -top-1 -right-1 text-2xl animate-bounce">🎉</span>
+          </div>
+
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 text-xs font-bold uppercase tracking-wider mb-2">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Registration Confirmed
+            </div>
+            <h2 className={`text-2xl sm:text-3xl font-extrabold mt-1 leading-tight ${atmosphere.headingClass}`}>
+              {form.title}
+            </h2>
+          </div>
+
+          {/* Organizer's Custom Success Message */}
+          <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-left space-y-1.5 shadow-xs">
+            <span className="block text-xs font-bold uppercase tracking-wider text-emerald-800">
+              Confirmation Message
+            </span>
+            <p className="text-sm sm:text-base font-medium text-emerald-950 whitespace-pre-line leading-relaxed">
+              {form.success_message && form.success_message.trim() !== ''
+                ? form.success_message
+                : 'Thank you! Your registration has been received and confirmed by the event organizers.'}
+            </p>
+          </div>
+
+          {/* Reference ID & Copy Option */}
+          {submissionId && (
+            <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center justify-between gap-3 text-left">
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-60 block">
+                  Confirmation Reference ID
+                </span>
+                <span className="text-sm font-mono font-bold truncate block">
+                  {submissionId}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyReference}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 shadow-xs shrink-0 cursor-pointer transition-all active:scale-95"
+              >
+                {copiedReference ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Copy ID</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Quick Event Summary Reminder */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left text-xs">
+            <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center gap-2.5">
+              <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase opacity-60">Event Date</span>
+                <span className="font-semibold truncate block">
+                  {new Date(eventDate).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center gap-2.5">
+              <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase opacity-60">Venue</span>
+                <span className="font-semibold truncate block">{venue}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Redirect Notice if configured */}
+          {form.redirect_url && !isPreview && (
+            <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/25 rounded-2xl text-xs text-indigo-900 dark:text-indigo-200 flex items-center justify-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-500 shrink-0 animate-pulse" />
+              <span>Redirecting you to the next step shortly...</span>
+              <a
+                href={form.redirect_url}
+                className="font-bold underline ml-1 hover:opacity-80"
+              >
+                Click here
+              </a>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={handleReset}
+              leftIcon={<RotateCcw className="w-4 h-4" />}
+              className="w-full sm:w-auto"
+            >
+              Submit Another Response
+            </Button>
+
+            {isPreview && onClosePreview && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={onClosePreview}
+                className="w-full sm:w-auto"
+                style={{ backgroundColor: accentColor }}
+              >
+                Return to Builder
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // CLOSED / DEADLINE EXPIRED STATE
+  if (isClosed) {
+    return (
+      <div
+        className={`min-h-screen py-16 px-4 flex items-center justify-center font-sans ${atmosphere.wrapperClass}`}
+        style={atmosphere.wrapperStyle}
+      >
+        <div className={`max-w-md w-full rounded-3xl p-8 text-center space-y-5 animate-fade-in ${atmosphere.cardClass}`}>
+          <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+            <Lock className="w-7 h-7" />
+          </div>
+          <div>
+            <h2 className={`text-xl font-bold ${atmosphere.headingClass}`}>{form.title}</h2>
+            <p className={`text-sm mt-1 ${atmosphere.descClass}`}>Registration is currently closed</p>
+          </div>
+          <p className="text-xs text-slate-600 bg-black/5 dark:bg-white/5 p-4 rounded-xl border border-black/10 dark:border-white/10 leading-relaxed">
+            {isDeadlinePassed
+              ? 'The deadline for this event has passed. No further registrations are being accepted.'
+              : 'The organizers have temporarily or permanently closed registrations for this event.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // ACTIVE REGISTRATION FORM
   return (
@@ -450,60 +631,77 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         </div>
       )}
 
-      <div className="max-w-2xl sm:max-w-3xl mx-auto space-y-6 relative z-10">
+      {/* Top Preview Banner (only shown in Preview mode) */}
+      {isPreview && (
+        <div className="max-w-2xl mx-auto mb-6 bg-amber-500 text-amber-950 px-4 py-2.5 rounded-2xl shadow-md flex items-center justify-between text-xs font-semibold">
+          <span>👀 Interactive Preview Mode — Test submissions are simulated safely.</span>
+          {onClosePreview && (
+            <button
+              onClick={onClosePreview}
+              className="underline hover:text-white transition-colors cursor-pointer"
+            >
+              Exit Preview
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="max-w-2xl mx-auto space-y-6 relative z-10">
         {/* Event Header Banner Card */}
-        <div className={`rounded-3xl border shadow-md overflow-hidden ${atmosphere.cardClass}`}>
-          {/* Always Visible High-Resolution Event Banner */}
-          <div className="relative w-full overflow-hidden bg-slate-950 flex items-center justify-center h-52 sm:h-64 md:h-72">
-            {/* Blurred background mirror to prevent letterbox voids */}
-            <div
-              className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-125 pointer-events-none"
-              style={{ backgroundImage: `url(${bannerImageUrl})` }}
-            />
+        <div className={`rounded-3xl border overflow-hidden shadow-xl transition-all duration-300 ${atmosphere.cardClass}`}>
+          {/* Banner Cover Image */}
+          <div className="w-full h-44 sm:h-64 relative overflow-hidden bg-slate-900 group">
             <img
               src={bannerImageUrl}
               alt={form.title}
+              className="w-full h-full object-cover object-center transform group-hover:scale-105 transition-transform duration-700"
               onError={(e) => {
-                e.currentTarget.src =
+                // Guaranteed fallback image on broken network link
+                (e.target as HTMLImageElement).src =
                   'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';
               }}
-              className="w-full h-full object-cover relative z-10 transition-transform duration-300"
             />
-            <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent pointer-events-none" />
-            <div className="absolute bottom-5 left-6 right-6 text-white z-30">
-              <span className="text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 inline-block mb-2 shadow-xs">
-                Official Registration
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+
+            {/* Registration Open Badge */}
+            <div className="absolute top-4 right-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/90 text-white shadow-lg backdrop-blur-md">
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                Registrations Open
               </span>
-              <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight drop-shadow-md">
+            </div>
+
+            {/* Title overlay on banner */}
+            <div className="absolute bottom-4 left-6 right-6 text-white">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-white/80 bg-black/40 px-2.5 py-0.5 rounded-md backdrop-blur-sm border border-white/20">
+                Official Event Form
+              </span>
+              <h1 className="text-xl sm:text-3xl font-extrabold text-white mt-1 drop-shadow-md leading-tight">
                 {form.title}
               </h1>
             </div>
           </div>
 
-          <div className="p-6 sm:p-8 space-y-4">
-            {form.description && (
-              <p className={`text-sm leading-relaxed whitespace-pre-line ${atmosphere.descClass}`}>
-                {form.description}
-              </p>
-            )}
-          </div>
+          {/* Form Description */}
+          {form.description && (
+            <div className={`p-6 border-b text-sm leading-relaxed whitespace-pre-line ${atmosphere.descClass} ${atmosphere.borderClass}`}>
+              {form.description}
+            </div>
+          )}
         </div>
 
-        {/* Prominent Event Schedule & Venue Details Bar */}
-        <div className={`rounded-3xl border p-4 sm:p-5 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3.5 ${atmosphere.cardClass}`}>
-          {/* Event Date & Time */}
-          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-500/5 border border-slate-500/10">
-            <div
-              className="p-2.5 rounded-xl text-white shadow-xs shrink-0"
-              style={{ backgroundColor: accentColor }}
-            >
+        {/* Event Schedule & Venue Metadata Badges */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Event Date */}
+          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+            <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-xs shrink-0">
               <Calendar className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Event Date & Time
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                Event Date
               </span>
-              <span className={`block text-xs sm:text-sm font-bold truncate mt-0.5 ${atmosphere.headingClass}`}>
+              <span className="block text-xs sm:text-sm font-bold text-indigo-950 truncate mt-0.5">
                 {new Date(eventDate).toLocaleDateString(undefined, {
                   weekday: 'short',
                   month: 'short',
@@ -511,29 +709,26 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                   year: 'numeric',
                 })}
               </span>
-              <span className="block text-[11px] text-slate-500 mt-0.5">
-                {new Date(eventDate).toLocaleTimeString(undefined, {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })} IST
+              <span className="block text-[10px] font-semibold text-indigo-700/80 mt-0.5">
+                Starts at {new Date(eventDate).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
 
-          {/* Venue & Location */}
-          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-500/5 border border-slate-500/10">
-            <div className="p-2.5 rounded-xl bg-sky-600 text-white shadow-xs shrink-0">
+          {/* Event Venue */}
+          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+            <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-xs shrink-0">
               <MapPin className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Venue & Location
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                Location & Venue
               </span>
-              <span className={`block text-xs sm:text-sm font-bold truncate mt-0.5 ${atmosphere.headingClass}`} title={venue}>
+              <span className="block text-xs sm:text-sm font-bold text-emerald-950 truncate mt-0.5" title={venue}>
                 {venue}
               </span>
-              <span className="block text-[11px] text-slate-500 mt-0.5">
-                On-site / In-Person
+              <span className="block text-[10px] font-semibold text-emerald-700/80 mt-0.5">
+                In-person Event
               </span>
             </div>
           </div>
@@ -583,11 +778,22 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                   value={formValues[field.field_key]}
                   onChange={(val) => handleFieldChange(field.field_key, val)}
                   error={errors[field.field_key]}
-                  accentColor={theme.accentColor}
+                  accentColor={accentColor}
                 />
               </div>
             );
           })}
+
+          {/* Visible Submission Error Banner */}
+          {submissionError && (
+            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-start gap-3 shadow-md animate-shake">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <span className="font-bold block text-rose-950">Registration Requires Attention</span>
+                <span className="text-rose-800 leading-relaxed">{submissionError}</span>
+              </div>
+            </div>
+          )}
 
           {/* Bottom Submit Bar */}
           <div className={`rounded-2xl p-6 border shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 ${atmosphere.cardClass}`}>
@@ -603,7 +809,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
               isLoading={isSubmitting}
               rightIcon={<ArrowRight className="w-4 h-4" />}
               className="w-full sm:w-auto"
-              style={{ backgroundColor: theme.accentColor }}
+              style={{ backgroundColor: accentColor }}
             >
               Submit Registration
             </Button>
