@@ -5,7 +5,43 @@ import { getSupabaseClient } from './supabaseClient';
 const STORAGE_KEYS = {
   FORMS: 'eventform_forms_v1',
   SUBMISSIONS: 'eventform_submissions_v1',
+  DELETED_FORM_IDS: 'eventform_deleted_ids_v1',
+  DELETED_SUBMISSION_IDS: 'eventform_deleted_submission_ids_v1',
 };
+
+function getDeletedFormIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_FORM_IDS);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function addDeletedFormId(id: string) {
+  if (typeof window === 'undefined') return;
+  const set = getDeletedFormIds();
+  set.add(id);
+  localStorage.setItem(STORAGE_KEYS.DELETED_FORM_IDS, JSON.stringify(Array.from(set)));
+}
+
+function getDeletedSubmissionIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_SUBMISSION_IDS);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function addDeletedSubmissionId(id: string) {
+  if (typeof window === 'undefined') return;
+  const set = getDeletedSubmissionIds();
+  set.add(id);
+  localStorage.setItem(STORAGE_KEYS.DELETED_SUBMISSION_IDS, JSON.stringify(Array.from(set)));
+}
 
 // Initialize local storage with sample forms if empty
 function initializeStorage() {
@@ -28,6 +64,7 @@ export class StorageService {
    * Fetch all forms
    */
   static async getForms(): Promise<Form[]> {
+    const deletedIds = getDeletedFormIds();
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -37,10 +74,12 @@ export class StorageService {
           .order('created_at', { ascending: false });
 
         if (!error && data) {
-          return data.map((f: any) => ({
-            ...f,
-            fields: (f.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
-          }));
+          return data
+            .filter((f: any) => !deletedIds.has(f.id))
+            .map((f: any) => ({
+              ...f,
+              fields: (f.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
+            }));
         }
       } catch (err) {
         console.warn('Supabase fetch failed, falling back to local storage', err);
@@ -50,9 +89,10 @@ export class StorageService {
     // Local Storage fallback
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
-      return raw ? JSON.parse(raw) : SAMPLE_FORMS;
+      const list: Form[] = raw ? JSON.parse(raw) : SAMPLE_FORMS;
+      return list.filter((f) => !deletedIds.has(f.id));
     } catch {
-      return SAMPLE_FORMS;
+      return SAMPLE_FORMS.filter((f) => !deletedIds.has(f.id));
     }
   }
 
@@ -60,6 +100,7 @@ export class StorageService {
    * Fetch a single form by unique slug
    */
   static async getFormBySlug(slug: string): Promise<Form | null> {
+    const deletedIds = getDeletedFormIds();
     const cleanSlug = decodeURIComponent(slug.trim()).toLowerCase().replace(/\/+$/, '');
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -70,7 +111,7 @@ export class StorageService {
           .ilike('slug', cleanSlug)
           .single();
 
-        if (!error && data) {
+        if (!error && data && !deletedIds.has(data.id)) {
           return {
             ...data,
             fields: (data.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
@@ -82,15 +123,18 @@ export class StorageService {
     }
 
     const forms = await this.getForms();
-    const found = forms.find((f) => f.slug.toLowerCase() === cleanSlug);
+    const found = forms.find((f) => f.slug.toLowerCase() === cleanSlug && !deletedIds.has(f.id));
     if (found) return found;
 
     // Check pre-seeded forms directly
-    const seedFound = SAMPLE_FORMS.find((f) => f.slug.toLowerCase() === cleanSlug);
+    const seedFound = SAMPLE_FORMS.find((f) => f.slug.toLowerCase() === cleanSlug && !deletedIds.has(f.id));
     if (seedFound) return seedFound;
 
     // Dynamic fallback for any created event form slug (e.g. event-form-mvp862sx)
-    if (cleanSlug.startsWith('event-form-') || cleanSlug.startsWith('form-')) {
+    if (
+      (cleanSlug.startsWith('event-form-') || cleanSlug.startsWith('form-')) &&
+      !deletedIds.has(`form-${cleanSlug}`)
+    ) {
       const fallbackForm: Form = {
         id: `form-${cleanSlug}`,
         owner_id: 'admin',
@@ -159,6 +203,8 @@ export class StorageService {
    * Fetch a single form by ID
    */
   static async getFormById(id: string): Promise<Form | null> {
+    const deletedIds = getDeletedFormIds();
+    if (deletedIds.has(id)) return null;
     const forms = await this.getForms();
     return forms.find((f) => f.id === id) || null;
   }
@@ -247,23 +293,69 @@ export class StorageService {
    * Delete a form and its responses
    */
   static async deleteForm(formId: string): Promise<void> {
+    // 1. Immediately blacklist form ID so it can never be fetched or resurrected
+    addDeletedFormId(formId);
+
+    // If form has a slug, also blacklist its slug to prevent fallback resurrection
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
+      if (raw) {
+        const parsed: Form[] = JSON.parse(raw);
+        const f = parsed.find((item) => item.id === formId);
+        if (f?.slug) {
+          addDeletedFormId(f.slug.toLowerCase());
+          addDeletedFormId(`form-${f.slug.toLowerCase()}`);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Cascade delete in Supabase if connected
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        // Must delete child submissions and child fields first to satisfy foreign key constraints!
+        await supabase.from('submissions').delete().eq('form_id', formId);
+        await supabase.from('form_fields').delete().eq('form_id', formId);
         await supabase.from('forms').delete().eq('id', formId);
       } catch (e) {
-        console.warn('Supabase delete error', e);
+        console.warn('Supabase cascade delete failed', e);
       }
     }
 
-    const currentForms = await this.getForms();
-    const filtered = currentForms.filter((f) => f.id !== formId);
-    localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(filtered));
+    // 3. Remove from LocalStorage forms
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
+      if (raw) {
+        const parsed: Form[] = JSON.parse(raw);
+        const filtered = parsed.filter((f) => f.id !== formId);
+        localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.warn('Local storage forms delete failed', e);
+    }
 
-    // Also remove local submissions
-    const subs = await this.getAllSubmissions();
-    const filteredSubs = subs.filter((s) => s.form_id !== formId);
-    localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(filteredSubs));
+    // 4. Remove from LocalStorage submissions
+    try {
+      const rawSubs = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+      if (rawSubs) {
+        const parsedSubs: Submission[] = JSON.parse(rawSubs);
+        const filteredSubs = parsedSubs.filter((s) => s.form_id !== formId);
+        localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(filteredSubs));
+      }
+    } catch (e) {
+      console.warn('Local storage submissions delete failed', e);
+    }
+  }
+
+  /**
+   * Batch delete multiple forms
+   */
+  static async deleteForms(formIds: string[]): Promise<void> {
+    for (const id of formIds) {
+      await this.deleteForm(id);
+    }
   }
 
   /**
@@ -298,6 +390,7 @@ export class StorageService {
    * Submissions Management
    */
   static async getAllSubmissions(): Promise<Submission[]> {
+    const deletedSubmissionIds = getDeletedSubmissionIds();
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -307,7 +400,7 @@ export class StorageService {
           .order('submitted_at', { ascending: false });
 
         if (!error && data) {
-          return data;
+          return data.filter((s: any) => !deletedSubmissionIds.has(s.id));
         }
       } catch (err) {
         console.warn('Supabase submissions fetch error, falling back', err);
@@ -316,9 +409,10 @@ export class StorageService {
 
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
-      return raw ? JSON.parse(raw) : INITIAL_SUBMISSIONS;
+      const list: Submission[] = raw ? JSON.parse(raw) : INITIAL_SUBMISSIONS;
+      return list.filter((s) => !deletedSubmissionIds.has(s.id));
     } catch {
-      return INITIAL_SUBMISSIONS;
+      return INITIAL_SUBMISSIONS.filter((s) => !deletedSubmissionIds.has(s.id));
     }
   }
 
@@ -375,6 +469,10 @@ export class StorageService {
   }
 
   static async deleteSubmission(submissionId: string): Promise<void> {
+    // 1. Immediately blacklist submission ID
+    addDeletedSubmissionId(submissionId);
+
+    // 2. Delete from Supabase
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -384,9 +482,17 @@ export class StorageService {
       }
     }
 
-    const currentSubs = await this.getAllSubmissions();
-    const filtered = currentSubs.filter((s) => s.id !== submissionId);
-    localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(filtered));
+    // 3. Remove from LocalStorage
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+      if (raw) {
+        const parsed: Submission[] = JSON.parse(raw);
+        const filtered = parsed.filter((s) => s.id !== submissionId);
+        localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.warn('Local storage submissions delete failed', e);
+    }
   }
 
   /**

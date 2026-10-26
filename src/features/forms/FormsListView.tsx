@@ -15,9 +15,13 @@ import {
   MoreVertical,
   ExternalLink,
   Sparkles,
+  Check,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
+import { Modal } from '../../generic-ui/components/Modal';
 import { useToast } from '../../generic-ui/ToastContext';
 
 interface FormsListViewProps {
@@ -29,6 +33,7 @@ interface FormsListViewProps {
   onViewResponses: (formId: string) => void;
   onDuplicateForm: (formId: string) => Promise<void>;
   onDeleteForm: (formId: string) => Promise<void>;
+  onDeleteForms?: (formIds: string[]) => Promise<void>;
   onTogglePublish: (form: Form) => Promise<void>;
   onOpenPublicUrl: (slug: string) => void;
 }
@@ -42,6 +47,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
   onViewResponses,
   onDuplicateForm,
   onDeleteForm,
+  onDeleteForms,
   onTogglePublish,
   onOpenPublicUrl,
 }) => {
@@ -50,6 +56,11 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
   const [sortBy, setSortBy] = useState<'updated' | 'title' | 'responses'>('updated');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const { success, error } = useToast();
+
+  // Delete confirmation modals state
+  const [formToDelete, setFormToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isDeletingSingle, setIsDeletingSingle] = useState(false);
 
   const filteredForms = useMemo(() => {
     return forms
@@ -73,7 +84,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
   const [selectedFormIds, setSelectedFormIds] = useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
-  const handleToggleSelect = (id: string, e: React.MouseEvent | React.ChangeEvent) => {
+  const handleToggleSelect = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedFormIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
@@ -88,24 +99,21 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
     }
   };
 
-  const handleBulkDelete = async () => {
+  const confirmBulkDelete = async () => {
     if (selectedFormIds.length === 0) return;
-    if (
-      !window.confirm(
-        `Are you sure you want to delete ${selectedFormIds.length} selected forms? All associated submissions will be permanently removed.`
-      )
-    ) {
-      return;
-    }
-
     setIsBulkDeleting(true);
     const count = selectedFormIds.length;
     try {
-      for (const id of selectedFormIds) {
-        await onDeleteForm(id);
+      if (onDeleteForms) {
+        await onDeleteForms(selectedFormIds);
+      } else {
+        for (const id of selectedFormIds) {
+          await onDeleteForm(id);
+        }
       }
       setSelectedFormIds([]);
-      success('Forms Deleted', `${count} event forms were successfully deleted.`);
+      setShowBulkDeleteConfirm(false);
+      success('Forms Deleted', `${count} event forms were permanently deleted.`);
     } catch {
       error('Delete Failed', 'Failed to delete some of the selected forms.');
     } finally {
@@ -125,19 +133,19 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
     }
   };
 
-  const handleDelete = async (id: string, title: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${title}"? All submissions will be removed.`)) {
-      return;
-    }
-    setActionLoadingId(id);
+  const confirmDeleteSingle = async () => {
+    if (!formToDelete) return;
+    const { id, title } = formToDelete;
+    setIsDeletingSingle(true);
     try {
       await onDeleteForm(id);
       setSelectedFormIds((prev) => prev.filter((item) => item !== id));
-      success('Form Deleted', `"${title}" has been deleted.`);
+      setFormToDelete(null);
+      success('Form Deleted', `"${title}" has been permanently deleted.`);
     } catch {
       error('Failed', 'Could not delete form.');
     } finally {
-      setActionLoadingId(null);
+      setIsDeletingSingle(false);
     }
   };
 
@@ -210,19 +218,32 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
       {/* Bulk Selection Bar */}
       {filteredForms.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 px-2 text-xs">
-          <label className="flex items-center gap-2 font-medium text-slate-700 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={selectedFormIds.length > 0 && selectedFormIds.length === filteredForms.length}
-              onChange={handleSelectAll}
-              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-            />
-            <span>Select All ({filteredForms.length} forms)</span>
-          </label>
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            className="flex items-center gap-2.5 font-medium text-slate-700 cursor-pointer select-none py-1.5 px-2.5 rounded-xl hover:bg-slate-100 transition-colors"
+          >
+            <div
+              className={`flex items-center justify-center w-4 h-4 rounded border transition-all ${
+                selectedFormIds.length > 0 && selectedFormIds.length === filteredForms.length
+                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                  : selectedFormIds.length > 0
+                  ? 'bg-indigo-100 border-indigo-500 text-indigo-700'
+                  : 'bg-white border-slate-300 text-transparent'
+              }`}
+            >
+              <Check className="w-3 h-3 stroke-[3]" />
+            </div>
+            <span>
+              {selectedFormIds.length === filteredForms.length
+                ? `Deselect All (${filteredForms.length})`
+                : `Select All (${filteredForms.length} forms)`}
+            </span>
+          </button>
 
           {selectedFormIds.length > 0 && (
             <div className="flex items-center gap-2.5 animate-fade-in">
-              <span className="text-slate-600 font-semibold">
+              <span className="text-slate-700 font-semibold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg border border-indigo-100 text-xs">
                 {selectedFormIds.length} form{selectedFormIds.length > 1 ? 's' : ''} selected
               </span>
               <Button
@@ -235,7 +256,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
               <Button
                 variant="danger"
                 size="sm"
-                onClick={handleBulkDelete}
+                onClick={() => setShowBulkDeleteConfirm(true)}
                 isLoading={isBulkDeleting}
                 leftIcon={<Trash2 className="w-3.5 h-3.5" />}
               >
@@ -272,19 +293,23 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                   className="h-36 w-full relative bg-slate-900 cursor-pointer overflow-hidden"
                   onClick={() => onEditForm(form.id)}
                 >
-                  {/* Form Selection Checkbox */}
+                  {/* Form Selection Checkbox Toggle */}
                   <div
                     className="absolute top-3 left-3 z-20"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <label className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/95 hover:bg-white shadow-sm cursor-pointer transition-all border border-slate-300/80">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => handleToggleSelect(form.id, e)}
-                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-                      />
-                    </label>
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleSelect(form.id, e)}
+                      className={`flex items-center justify-center w-7 h-7 rounded-lg shadow-sm transition-all border cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 border-indigo-600 text-white scale-105 ring-2 ring-white/90 shadow'
+                          : 'bg-white/95 hover:bg-white border-slate-300/80 text-transparent hover:text-slate-300'
+                      }`}
+                      title={isSelected ? 'Deselect Form' : 'Select Form to Delete'}
+                    >
+                      <Check className="w-4 h-4 stroke-[3]" />
+                    </button>
                   </div>
                   {form.cover_image_url ? (
                     <img
@@ -338,8 +363,9 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                   {/* Metrics and Responses count */}
                   <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
                     <button
+                      type="button"
                       onClick={() => onViewResponses(form.id)}
-                      className="flex items-center gap-1.5 font-semibold text-indigo-600 hover:text-indigo-800"
+                      className="flex items-center gap-1.5 font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
                     >
                       <Inbox className="w-3.5 h-3.5" />
                       <span>{count} Submissions</span>
@@ -354,6 +380,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                   <div className="flex items-center justify-between pt-1 gap-2">
                     <div className="flex items-center gap-1">
                       <button
+                        type="button"
                         onClick={() => onEditForm(form.id)}
                         className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                         title="Edit Form Canvas"
@@ -362,6 +389,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => onPreviewForm(form.id)}
                         className="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
                         title="Participant Preview"
@@ -370,6 +398,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => onOpenPublicUrl(form.slug)}
                         className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                         title="Open Public Link"
@@ -378,6 +407,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => handleDuplicate(form.id)}
                         className="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
                         title="Duplicate Form"
@@ -386,8 +416,13 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                       </button>
 
                       <button
-                        onClick={() => handleDelete(form.id, form.title)}
-                        className="p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        type="button"
+                        disabled={actionLoadingId === form.id || (isDeletingSingle && formToDelete?.id === form.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFormToDelete({ id: form.id, title: form.title });
+                        }}
+                        className="p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                         title="Delete Form"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -407,6 +442,98 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
             );
           })}
         </div>
+      )}
+
+      {/* Single Delete Confirmation Modal */}
+      {formToDelete && (
+        <Modal
+          isOpen={Boolean(formToDelete)}
+          onClose={() => !isDeletingSingle && setFormToDelete(null)}
+          title="Delete Event Form"
+          description="Permanently delete this event form and all associated data."
+          maxWidth="md"
+          footer={
+            <div className="flex items-center justify-end gap-3 w-full">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isDeletingSingle}
+                onClick={() => setFormToDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                isLoading={isDeletingSingle}
+                leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                onClick={confirmDeleteSingle}
+              >
+                Yes, Delete Form
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-rose-900 text-sm">
+                  Are you sure you want to delete <span className="underline font-bold">"{formToDelete.title}"</span>?
+                </p>
+                <p className="text-rose-700 leading-relaxed">
+                  This action will permanently delete the form, all configured questions, public access links, and all participant submissions. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <Modal
+          isOpen={showBulkDeleteConfirm}
+          onClose={() => !isBulkDeleting && setShowBulkDeleteConfirm(false)}
+          title={`Delete ${selectedFormIds.length} Event Forms`}
+          description="Permanently delete all selected event forms."
+          maxWidth="md"
+          footer={
+            <div className="flex items-center justify-end gap-3 w-full">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isBulkDeleting}
+                onClick={() => setShowBulkDeleteConfirm(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                isLoading={isBulkDeleting}
+                leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                onClick={confirmBulkDelete}
+              >
+                Yes, Delete {selectedFormIds.length} Forms
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-rose-900 text-sm">
+                  You are about to delete {selectedFormIds.length} selected event forms.
+                </p>
+                <p className="text-rose-700 leading-relaxed">
+                  All associated questions, styling configurations, and all participant registration records will be permanently removed from the system.
+                </p>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

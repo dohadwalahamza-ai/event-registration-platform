@@ -253,11 +253,36 @@ function AppContent() {
   // Delete form
   const handleDeleteForm = async (formId: string) => {
     await StorageService.deleteForm(formId);
-    setForms((prev) => prev.filter((f) => f.id !== formId));
+    setForms((prev) => {
+      const remaining = prev.filter((f) => f.id !== formId);
+      if (activeFormId === formId) {
+        setActiveFormId(remaining[0]?.id || null);
+      }
+      return remaining;
+    });
     setSubmissions((prev) => prev.filter((s) => s.form_id !== formId));
-    if (activeFormId === formId) {
-      setActiveFormId(forms[0]?.id || null);
-    }
+    setStats((prev) => ({
+      ...prev,
+      totalForms: Math.max(0, prev.totalForms - 1),
+    }));
+  };
+
+  // Bulk delete forms
+  const handleDeleteForms = async (formIds: string[]) => {
+    await StorageService.deleteForms(formIds);
+    const idSet = new Set(formIds);
+    setForms((prev) => {
+      const remaining = prev.filter((f) => !idSet.has(f.id));
+      if (activeFormId && idSet.has(activeFormId)) {
+        setActiveFormId(remaining[0]?.id || null);
+      }
+      return remaining;
+    });
+    setSubmissions((prev) => prev.filter((s) => !idSet.has(s.form_id)));
+    setStats((prev) => ({
+      ...prev,
+      totalForms: Math.max(0, prev.totalForms - formIds.length),
+    }));
   };
 
   // Toggle publish status
@@ -404,6 +429,7 @@ function AppContent() {
           onViewResponses={(id) => navigateToTab('responses', id)}
           onDuplicateForm={handleDuplicateForm}
           onDeleteForm={handleDeleteForm}
+          onDeleteForms={handleDeleteForms}
           onTogglePublish={handleTogglePublish}
           onOpenPublicUrl={handleOpenPublicUrl}
         />
