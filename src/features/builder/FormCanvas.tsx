@@ -39,7 +39,7 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
   onOpenFieldLibrary,
 }) => {
   const fields = form.fields || [];
-  const backgroundStyle = form.theme_config?.backgroundStyle || 'accent_glow';
+  const backgroundStyle = form.theme_config?.backgroundStyle || 'banner_glass';
   const accentColor = form.theme_config?.accentColor || '#4f46e5';
 
   const bannerImageUrl =
@@ -47,8 +47,41 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
       ? form.cover_image_url
       : 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';
 
+  const eventDate =
+    form.event_date && form.event_date.trim() !== ''
+      ? form.event_date
+      : '2026-11-20T10:00';
+
+  const venue =
+    form.venue && form.venue.trim() !== ''
+      ? form.venue
+      : 'Grand Convention Center, Main Exhibition Hall';
+
+  const deadline =
+    form.registration_deadline && form.registration_deadline.trim() !== ''
+      ? form.registration_deadline
+      : '2026-11-18T23:59';
+
   const getCanvasBackground = () => {
     switch (backgroundStyle) {
+      case 'banner_glass':
+        return {
+          backgroundColor: '#0b0f19',
+          backgroundImage: `linear-gradient(rgba(11, 15, 25, 0.8), rgba(11, 15, 25, 0.8)), url(${bannerImageUrl})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+        };
+      case 'solid_color':
+        return {
+          backgroundColor: form.theme_config?.customBackgroundColor || '#0f172a',
+          backgroundImage: 'none',
+        };
+      case 'vibrant_gradient':
+        return {
+          backgroundColor: '#0f172a',
+          backgroundImage: `linear-gradient(135deg, ${accentColor} 0%, #1e1b4b 50%, #0f172a 100%)`,
+        };
       case 'midnight_dark':
         return {
           backgroundColor: '#090d16',
@@ -56,22 +89,22 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
         };
       case 'sunset_warm':
         return {
-          backgroundColor: '#fffaf5',
-          backgroundImage: `radial-gradient(ellipse at 50% 0%, #f59e0b20 0%, transparent 60%), linear-gradient(135deg, #fff7ed 0%, #fff1f2 100%)`,
+          backgroundColor: '#fff7ed',
+          backgroundImage: `radial-gradient(ellipse at 50% 0%, #f59e0b20 0%, transparent 60%), linear-gradient(135deg, #fff7ed 0%, #fef3c7 50%, #fed7aa 100%)`,
         };
       case 'emerald_turf':
         return {
-          backgroundColor: '#f5fdf8',
-          backgroundImage: `radial-gradient(ellipse at 50% 0%, #05966920 0%, transparent 60%), linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)`,
+          backgroundColor: '#f0fdf4',
+          backgroundImage: `radial-gradient(ellipse at 50% 0%, #05966920 0%, transparent 60%), linear-gradient(135deg, #f0fdf4 0%, #d1fae5 50%, #a7f3d0 100%)`,
         };
       case 'ocean_blue':
         return {
-          backgroundColor: '#f5faff',
-          backgroundImage: `radial-gradient(ellipse at 50% 0%, #0284c720 0%, transparent 60%), linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)`,
+          backgroundColor: '#f0f9ff',
+          backgroundImage: `radial-gradient(ellipse at 50% 0%, #0284c720 0%, transparent 60%), linear-gradient(135deg, #f0f9ff 0%, #bae6fd 50%, #e0e7ff 100%)`,
         };
       case 'soft_minimal':
         return {
-          backgroundColor: '#f1f5f9',
+          backgroundColor: '#e2e8f0',
           backgroundImage: 'none',
         };
       case 'accent_glow':
@@ -124,34 +157,33 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
             )}
 
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 pt-1 border-t border-slate-100">
-              {form.event_date && (
-                <span className="flex items-center gap-1.5 font-medium text-slate-700 bg-slate-50 px-3 py-1 rounded-xl border border-slate-200/80">
-                  <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                  {new Date(form.event_date).toLocaleDateString(undefined, {
+              <span className="flex items-center gap-1.5 font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
+                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                <span>
+                  {new Date(eventDate).toLocaleDateString(undefined, {
+                    weekday: 'short',
                     month: 'short',
                     day: 'numeric',
                     year: 'numeric',
                   })}
                 </span>
-              )}
+              </span>
 
-              {form.venue && (
-                <span className="flex items-center gap-1.5 font-medium text-slate-700 bg-slate-50 px-3 py-1 rounded-xl border border-slate-200/80">
-                  <MapPin className="w-3.5 h-3.5 text-indigo-600" />
-                  {form.venue}
-                </span>
-              )}
+              <span className="flex items-center gap-1.5 font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
+                <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{venue}</span>
+              </span>
 
-              {form.registration_deadline && (
-                <span className="flex items-center gap-1.5 font-medium text-amber-700 bg-amber-50 px-3 py-1 rounded-xl border border-amber-200/60">
-                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+              <span className="flex items-center gap-1.5 font-medium text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200/80">
+                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                <span>
                   Deadline:{' '}
-                  {new Date(form.registration_deadline).toLocaleDateString(undefined, {
+                  {new Date(deadline).toLocaleDateString(undefined, {
                     month: 'short',
                     day: 'numeric',
                   })}
                 </span>
-              )}
+              </span>
             </div>
           </div>
         </div>

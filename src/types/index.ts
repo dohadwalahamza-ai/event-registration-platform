@@ -76,11 +76,23 @@ export interface FormField {
   configuration?: Record<string, any>;
 }
 
+export type FormBackgroundStyle =
+  | 'banner_glass'
+  | 'solid_color'
+  | 'midnight_dark'
+  | 'vibrant_gradient'
+  | 'sunset_warm'
+  | 'emerald_turf'
+  | 'ocean_blue'
+  | 'soft_minimal'
+  | 'accent_glow';
+
 export interface FormThemeConfig {
   accentColor: string;
   headerStyle: 'banner' | 'card' | 'minimal';
   themeMode: 'light' | 'clean' | 'dark';
-  backgroundStyle?: 'accent_glow' | 'midnight_dark' | 'sunset_warm' | 'emerald_turf' | 'ocean_blue' | 'soft_minimal';
+  backgroundStyle?: FormBackgroundStyle;
+  customBackgroundColor?: string;
   fontFamily?: string;
   borderRadius: 'sm' | 'md' | 'lg' | 'xl';
 }

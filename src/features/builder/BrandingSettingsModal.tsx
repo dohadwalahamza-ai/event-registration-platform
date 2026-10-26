@@ -42,8 +42,12 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       accentColor: '#4f46e5',
       headerStyle: 'banner',
       themeMode: 'light',
+      backgroundStyle: 'banner_glass',
       borderRadius: 'xl',
     }
+  );
+  const [customBackgroundColor, setCustomBackgroundColor] = useState<string>(
+    form.theme_config?.customBackgroundColor || '#0f172a'
   );
 
   const colorPresets = [
@@ -54,6 +58,18 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
     { name: 'Rose', value: '#e11d48' },
     { name: 'Violet', value: '#7c3aed' },
     { name: 'Slate Dark', value: '#0f172a' },
+  ];
+
+  const solidColorPresets = [
+    { name: 'Dark Slate', value: '#0f172a' },
+    { name: 'Midnight Navy', value: '#020617' },
+    { name: 'Deep Indigo', value: '#1e1b4b' },
+    { name: 'Forest Emerald', value: '#022c22' },
+    { name: 'Velvet Plum', value: '#3b0764' },
+    { name: 'Deep Burgundy', value: '#4c0519' },
+    { name: 'Charcoal Zinc', value: '#18181b' },
+    { name: 'Cool Slate', value: '#334155' },
+    { name: 'Warm Stone', value: '#292524' },
   ];
 
   const bannerPresets = [
@@ -85,16 +101,28 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
 
   const backgroundPresets = [
     {
-      id: 'accent_glow',
-      name: 'Accent Glow (Default)',
-      desc: 'Ambient mesh glow with brand color',
-      stylePreview: 'bg-gradient-to-br from-indigo-50/80 via-slate-50 to-white border-indigo-200',
+      id: 'banner_glass',
+      name: 'Glass Effect of Banner',
+      desc: 'Ambient frosted glass reflection of your banner photo across page background',
+      stylePreview: 'bg-indigo-950/80 backdrop-blur-md border-indigo-400/50 text-white',
+    },
+    {
+      id: 'solid_color',
+      name: 'Custom Solid Color',
+      desc: 'Pick any solid color background (eliminates bright white glare)',
+      stylePreview: 'bg-slate-800 border-slate-600 text-white',
     },
     {
       id: 'midnight_dark',
       name: 'Midnight Dark',
-      desc: 'Sleek dark theme with glowing neon highlights',
+      desc: 'Sleek luxury dark theme with glowing neon highlights',
       stylePreview: 'bg-slate-900 border-slate-700 text-white',
+    },
+    {
+      id: 'vibrant_gradient',
+      name: 'Vibrant Mesh Gradient',
+      desc: 'Rich glowing gradient tailored to your brand accent color',
+      stylePreview: 'bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 border-purple-400 text-white',
     },
     {
       id: 'sunset_warm',
@@ -116,9 +144,15 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
     },
     {
       id: 'soft_minimal',
-      name: 'Soft Minimal',
-      desc: 'Clean, distraction-free neutral slate',
-      stylePreview: 'bg-slate-100 border-slate-300',
+      name: 'Soft Minimal Slate',
+      desc: 'Clean, distraction-free neutral slate (eliminates white glare)',
+      stylePreview: 'bg-slate-200 border-slate-300',
+    },
+    {
+      id: 'accent_glow',
+      name: 'Accent Glow (Default)',
+      desc: 'Light background with subtle brand glow',
+      stylePreview: 'bg-gradient-to-br from-indigo-50/80 via-slate-50 to-white border-indigo-200',
     },
   ];
 
@@ -146,7 +180,10 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       registration_deadline: deadline,
       success_message: successMessage,
       redirect_url: redirectUrl,
-      theme_config: themeConfig,
+      theme_config: {
+        ...themeConfig,
+        customBackgroundColor,
+      },
     });
     onClose();
   };
@@ -395,9 +432,9 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
             </label>
             <span className="text-[11px] text-slate-500">Live styling for public registration form</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             {backgroundPresets.map((bg) => {
-              const currentBg = themeConfig.backgroundStyle || 'accent_glow';
+              const currentBg = themeConfig.backgroundStyle || 'banner_glass';
               const isSelected = currentBg === bg.id;
               return (
                 <button
@@ -412,7 +449,7 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
                   }
                   className={`flex items-start gap-3 p-3 rounded-2xl border text-left transition-all ${
                     isSelected
-                      ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-500/20 shadow-xs'
+                      ? 'border-indigo-600 bg-indigo-50/40 ring-2 ring-indigo-500/20 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 bg-white'
                   }`}
                 >
@@ -422,7 +459,9 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
                     {isSelected && (
                       <Check
                         className={`w-4 h-4 ${
-                          bg.id === 'midnight_dark' ? 'text-white' : 'text-indigo-600'
+                          bg.id === 'midnight_dark' || bg.id === 'banner_glass' || bg.id === 'vibrant_gradient' || bg.id === 'solid_color'
+                            ? 'text-white'
+                            : 'text-indigo-600'
                         }`}
                       />
                     )}
@@ -442,6 +481,54 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
               );
             })}
           </div>
+
+          {/* Solid Color Customizer (Visible when 'solid_color' is selected) */}
+          {themeConfig.backgroundStyle === 'solid_color' && (
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">Choose Custom Solid Background Color:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-500">Pick color:</span>
+                  <input
+                    type="color"
+                    value={customBackgroundColor}
+                    onChange={(e) => setCustomBackgroundColor(e.target.value)}
+                    className="w-7 h-7 rounded-lg border border-slate-300 cursor-pointer p-0.5 bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={customBackgroundColor}
+                    onChange={(e) => setCustomBackgroundColor(e.target.value)}
+                    placeholder="#0f172a"
+                    className="w-20 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {solidColorPresets.map((sc) => {
+                  const isScSelected = customBackgroundColor.toLowerCase() === sc.value.toLowerCase();
+                  return (
+                    <button
+                      key={sc.value}
+                      type="button"
+                      onClick={() => setCustomBackgroundColor(sc.value)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all ${
+                        isScSelected ? 'border-indigo-600 ring-2 ring-indigo-500/30 bg-white' : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <span
+                        className="w-3.5 h-3.5 rounded-full shadow-xs border border-black/10"
+                        style={{ backgroundColor: sc.value }}
+                      />
+                      <span className="text-slate-700 text-[11px]">{sc.name}</span>
+                      {isScSelected && <Check className="w-3 h-3 text-indigo-600" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Success Message & Redirect */}

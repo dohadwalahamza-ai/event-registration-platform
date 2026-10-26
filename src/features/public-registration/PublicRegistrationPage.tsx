@@ -214,7 +214,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
   }
 
   const accentColor = theme.accentColor || '#4f46e5';
-  const backgroundStyle = theme.backgroundStyle || 'accent_glow';
+  const backgroundStyle = theme.backgroundStyle || 'banner_glass';
 
   // Guaranteed banner image URL with reliable high-resolution sports/event fallback
   const bannerImageUrl =
@@ -222,9 +222,67 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
       ? form.cover_image_url
       : 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';
 
+  // Guaranteed event schedule and venue with realistic defaults
+  const eventDate =
+    form.event_date && form.event_date.trim() !== ''
+      ? form.event_date
+      : '2026-11-20T10:00';
+
+  const venue =
+    form.venue && form.venue.trim() !== ''
+      ? form.venue
+      : 'Grand Convention Center, Main Exhibition Hall';
+
+  const deadline =
+    form.registration_deadline && form.registration_deadline.trim() !== ''
+      ? form.registration_deadline
+      : '2026-11-18T23:59';
+
   // Dynamic background atmosphere styling based on themeConfig.backgroundStyle
   const getThemeAtmosphere = (bg: string, accent: string) => {
     switch (bg) {
+      case 'banner_glass':
+        return {
+          isBannerGlass: true,
+          wrapperClass: 'text-slate-900',
+          wrapperStyle: {
+            backgroundColor: '#0b0f19',
+          },
+          cardClass: 'bg-white/90 backdrop-blur-xl border border-white/50 text-slate-900 shadow-2xl',
+          headingClass: 'text-slate-950',
+          descClass: 'text-slate-700',
+          metaBadgeClass: 'bg-white/80 border-slate-200 text-slate-800 shadow-xs',
+          borderClass: 'border-slate-200/80',
+          footerText: 'text-white/80',
+        };
+      case 'solid_color':
+        return {
+          isSolidColor: true,
+          wrapperClass: 'text-slate-900',
+          wrapperStyle: {
+            backgroundColor: theme.customBackgroundColor || '#0f172a',
+          },
+          cardClass: 'bg-white border-slate-200 text-slate-900 shadow-2xl',
+          headingClass: 'text-slate-900',
+          descClass: 'text-slate-600',
+          metaBadgeClass: 'bg-slate-50 border-slate-200 text-slate-700',
+          borderClass: 'border-slate-100',
+          footerText: 'text-slate-300',
+        };
+      case 'vibrant_gradient':
+        return {
+          wrapperClass: 'text-slate-900',
+          wrapperStyle: {
+            backgroundColor: '#0f172a',
+            backgroundImage: `linear-gradient(135deg, ${accent} 0%, #1e1b4b 50%, #0f172a 100%)`,
+          },
+          cardClass: 'bg-white/95 border-white/40 text-slate-900 shadow-2xl backdrop-blur-md',
+          headingClass: 'text-slate-900',
+          descClass: 'text-slate-600',
+          metaBadgeClass: 'bg-slate-50 border-slate-200 text-slate-700',
+          borderClass: 'border-slate-100',
+          footerText: 'text-white/80',
+        };
       case 'midnight_dark':
         return {
           wrapperClass: 'bg-[#090d16] text-slate-100',
@@ -232,74 +290,74 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
             backgroundColor: '#090d16',
             backgroundImage: `radial-gradient(ellipse 90% 50% at 50% -10%, ${accent}35 0%, transparent 70%), radial-gradient(circle at 100% 100%, ${accent}20 0%, transparent 45%)`,
           },
-          cardClass: 'bg-slate-900 border-slate-800 text-slate-100 shadow-xl',
+          cardClass: 'bg-slate-900/95 border-slate-800 text-slate-100 shadow-2xl',
           headingClass: 'text-white',
           descClass: 'text-slate-300',
           metaBadgeClass: 'bg-slate-800 border-slate-700 text-slate-200',
           borderClass: 'border-slate-800',
-          footerText: 'text-slate-500',
+          footerText: 'text-slate-400',
         };
       case 'sunset_warm':
         return {
-          wrapperClass: 'bg-[#fffaf5] text-slate-900',
+          wrapperClass: 'bg-[#fff7ed] text-slate-900',
           wrapperStyle: {
-            backgroundColor: '#fffaf5',
-            backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #f59e0b22 0%, transparent 70%), linear-gradient(135deg, #fff7ed 0%, #fff1f2 100%)`,
+            backgroundColor: '#fff7ed',
+            backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #f59e0b25 0%, transparent 70%), linear-gradient(135deg, #fff7ed 0%, #fef3c7 50%, #fed7aa 100%)`,
           },
-          cardClass: 'bg-white/95 border-amber-200/80 text-slate-900 shadow-md backdrop-blur-md',
+          cardClass: 'bg-white border-amber-200/80 text-slate-900 shadow-md',
           headingClass: 'text-slate-900',
           descClass: 'text-slate-600',
           metaBadgeClass: 'bg-amber-50/80 border-amber-200 text-amber-900',
           borderClass: 'border-amber-100',
-          footerText: 'text-slate-500',
+          footerText: 'text-slate-600',
         };
       case 'emerald_turf':
         return {
-          wrapperClass: 'bg-[#f5fdf8] text-slate-900',
+          wrapperClass: 'bg-[#f0fdf4] text-slate-900',
           wrapperStyle: {
-            backgroundColor: '#f5fdf8',
-            backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #05966922 0%, transparent 70%), linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)`,
+            backgroundColor: '#f0fdf4',
+            backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #05966925 0%, transparent 70%), linear-gradient(135deg, #f0fdf4 0%, #d1fae5 50%, #a7f3d0 100%)`,
           },
-          cardClass: 'bg-white/95 border-emerald-200/80 text-slate-900 shadow-md backdrop-blur-md',
+          cardClass: 'bg-white border-emerald-200/80 text-slate-900 shadow-md',
           headingClass: 'text-slate-900',
           descClass: 'text-slate-600',
           metaBadgeClass: 'bg-emerald-50/80 border-emerald-200 text-emerald-900',
           borderClass: 'border-emerald-100',
-          footerText: 'text-slate-500',
+          footerText: 'text-slate-600',
         };
       case 'ocean_blue':
         return {
-          wrapperClass: 'bg-[#f5faff] text-slate-900',
+          wrapperClass: 'bg-[#f0f9ff] text-slate-900',
           wrapperStyle: {
-            backgroundColor: '#f5faff',
-            backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #0284c722 0%, transparent 70%), linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)`,
+            backgroundColor: '#f0f9ff',
+            backgroundImage: `radial-gradient(ellipse 90% 60% at 50% -10%, #0284c725 0%, transparent 70%), linear-gradient(135deg, #f0f9ff 0%, #bae6fd 50%, #e0e7ff 100%)`,
           },
-          cardClass: 'bg-white/95 border-sky-200/80 text-slate-900 shadow-md backdrop-blur-md',
+          cardClass: 'bg-white border-sky-200/80 text-slate-900 shadow-md',
           headingClass: 'text-slate-900',
           descClass: 'text-slate-600',
           metaBadgeClass: 'bg-sky-50/80 border-sky-200 text-sky-900',
           borderClass: 'border-sky-100',
-          footerText: 'text-slate-500',
+          footerText: 'text-slate-600',
         };
       case 'soft_minimal':
         return {
-          wrapperClass: 'bg-slate-100 text-slate-900',
+          wrapperClass: 'bg-slate-200 text-slate-900',
           wrapperStyle: {
-            backgroundColor: '#f1f5f9',
+            backgroundColor: '#e2e8f0',
           },
-          cardClass: 'bg-white border-slate-200 text-slate-900 shadow-xs',
+          cardClass: 'bg-white border-slate-300 text-slate-900 shadow-sm',
           headingClass: 'text-slate-900',
           descClass: 'text-slate-600',
           metaBadgeClass: 'bg-slate-100 border-slate-200 text-slate-700',
           borderClass: 'border-slate-200',
-          footerText: 'text-slate-400',
+          footerText: 'text-slate-500',
         };
       case 'accent_glow':
       default:
         return {
-          wrapperClass: 'bg-slate-50 text-slate-900',
+          wrapperClass: 'bg-slate-100 text-slate-900',
           wrapperStyle: {
-            backgroundColor: '#f8fafc',
+            backgroundColor: '#f1f5f9',
             backgroundImage: `radial-gradient(ellipse 90% 50% at 50% -15%, ${accent}28 0%, transparent 75%), radial-gradient(circle at 100% 100%, ${accent}12 0%, transparent 40%)`,
           },
           cardClass: 'bg-white border-slate-200/90 text-slate-900 shadow-md',
@@ -307,7 +365,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           descClass: 'text-slate-600',
           metaBadgeClass: 'bg-slate-50 border-slate-200 text-slate-700',
           borderClass: 'border-slate-100',
-          footerText: 'text-slate-400',
+          footerText: 'text-slate-500',
         };
     }
   };
@@ -320,15 +378,30 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
       className={`min-h-screen py-6 sm:py-12 px-4 sm:px-6 font-sans relative overflow-x-hidden transition-colors duration-500 ${atmosphere.wrapperClass}`}
       style={atmosphere.wrapperStyle}
     >
+      {/* Banner Glass Ambient Background */}
+      {atmosphere.isBannerGlass && (
+        <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+          <div
+            className="absolute inset-0 bg-cover bg-center filter blur-3xl scale-125 opacity-70"
+            style={{ backgroundImage: `url(${bannerImageUrl})` }}
+          />
+          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-xl" />
+        </div>
+      )}
+
       {/* Ambient background glow orbs matching theme */}
-      <div
-        className="fixed -top-32 left-1/2 -translate-x-1/2 w-3/4 max-w-4xl h-80 rounded-full blur-3xl opacity-35 pointer-events-none -z-10"
-        style={{ backgroundColor: accentColor }}
-      />
-      <div
-        className="fixed -bottom-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-20 pointer-events-none -z-10"
-        style={{ backgroundColor: accentColor }}
-      />
+      {!atmosphere.isBannerGlass && !atmosphere.isSolidColor && (
+        <>
+          <div
+            className="fixed -top-32 left-1/2 -translate-x-1/2 w-3/4 max-w-4xl h-80 rounded-full blur-3xl opacity-35 pointer-events-none -z-10"
+            style={{ backgroundColor: accentColor }}
+          />
+          <div
+            className="fixed -bottom-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-20 pointer-events-none -z-10"
+            style={{ backgroundColor: accentColor }}
+          />
+        </>
+      )}
 
       <div className="max-w-2xl sm:max-w-3xl mx-auto space-y-6 relative z-10">
         {/* Event Header Banner Card */}
@@ -360,48 +433,83 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
             </div>
           </div>
 
-          <div className="p-6 sm:p-8 space-y-5">
+          <div className="p-6 sm:p-8 space-y-4">
             {form.description && (
               <p className={`text-sm leading-relaxed whitespace-pre-line ${atmosphere.descClass}`}>
                 {form.description}
               </p>
             )}
+          </div>
+        </div>
 
-            {/* Event Metadata Badges */}
-            <div className={`flex flex-wrap items-center gap-2.5 pt-2 border-t ${atmosphere.borderClass} text-xs`}>
-              {form.event_date && (
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-medium ${atmosphere.metaBadgeClass}`}>
-                  <Calendar className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>
-                    {new Date(form.event_date).toLocaleDateString(undefined, {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </span>
-                </div>
-              )}
+        {/* Prominent Event Schedule & Venue Details Bar */}
+        <div className={`rounded-3xl border p-4 sm:p-5 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3.5 ${atmosphere.cardClass}`}>
+          {/* Event Date & Time */}
+          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-500/5 border border-slate-500/10">
+            <div
+              className="p-2.5 rounded-xl text-white shadow-xs shrink-0"
+              style={{ backgroundColor: accentColor }}
+            >
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Event Date & Time
+              </span>
+              <span className={`block text-xs sm:text-sm font-bold truncate mt-0.5 ${atmosphere.headingClass}`}>
+                {new Date(eventDate).toLocaleDateString(undefined, {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </span>
+              <span className="block text-[11px] text-slate-500 mt-0.5">
+                {new Date(eventDate).toLocaleTimeString(undefined, {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })} IST
+              </span>
+            </div>
+          </div>
 
-              {form.venue && (
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-medium ${atmosphere.metaBadgeClass}`}>
-                  <MapPin className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>{form.venue}</span>
-                </div>
-              )}
+          {/* Venue & Location */}
+          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-500/5 border border-slate-500/10">
+            <div className="p-2.5 rounded-xl bg-sky-600 text-white shadow-xs shrink-0">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Venue & Location
+              </span>
+              <span className={`block text-xs sm:text-sm font-bold truncate mt-0.5 ${atmosphere.headingClass}`} title={venue}>
+                {venue}
+              </span>
+              <span className="block text-[11px] text-slate-500 mt-0.5">
+                On-site / In-Person
+              </span>
+            </div>
+          </div>
 
-              {form.registration_deadline && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 font-medium">
-                  <Clock className="w-3.5 h-3.5 text-amber-500" />
-                  <span>
-                    Closes:{' '}
-                    {new Date(form.registration_deadline).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </span>
-                </div>
-              )}
+          {/* Registration Deadline */}
+          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+            <div className="p-2.5 rounded-xl bg-amber-600 text-white shadow-xs shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                Registration Deadline
+              </span>
+              <span className="block text-xs sm:text-sm font-bold text-amber-950 truncate mt-0.5">
+                {new Date(deadline).toLocaleDateString(undefined, {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded-full mt-1">
+                ⏳ Closes at {new Date(deadline).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+              </span>
             </div>
           </div>
         </div>
