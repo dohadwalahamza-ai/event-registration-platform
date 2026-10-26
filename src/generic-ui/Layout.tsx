@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Header } from './Header';
 import { Sidebar, NavigationTab } from './Sidebar';
 import { Footer } from './Footer';
+import { Form, Submission } from '../types';
 
 export interface LayoutProps {
   currentTab: NavigationTab;
@@ -15,6 +16,9 @@ export interface LayoutProps {
   onLogout?: () => void;
   adminName?: string;
   adminEmail?: string;
+  submissions?: Submission[];
+  forms?: Form[];
+  onSelectFormResponses?: (formId: string) => void;
   children: React.ReactNode;
 }
 
@@ -30,6 +34,9 @@ export const Layout: React.FC<LayoutProps> = ({
   onLogout,
   adminName,
   adminEmail,
+  submissions,
+  forms,
+  onSelectFormResponses,
   children,
 }) => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -61,6 +68,9 @@ export const Layout: React.FC<LayoutProps> = ({
           onLogout={onLogout || (() => {})}
           adminName={adminName}
           adminEmail={adminEmail}
+          submissions={submissions}
+          forms={forms}
+          onSelectFormResponses={onSelectFormResponses}
         />
 
         {/* Page Content View */}

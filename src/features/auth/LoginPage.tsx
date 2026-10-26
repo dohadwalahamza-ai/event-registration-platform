@@ -22,8 +22,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onSuccess,
   onViewSamplePublicEvent,
 }) => {
-  const [email, setEmail] = useState('admin@eventform.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('admin@admin.com');
+  const [password, setPassword] = useState('admin@123');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -47,8 +47,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   const handleQuickDemoAdmin = () => {
-    setEmail('admin@eventform.com');
-    setPassword('admin123');
+    setEmail('admin@admin.com');
+    setPassword('admin@123');
   };
 
   return (
@@ -149,12 +149,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <button
               type="button"
               onClick={handleQuickDemoAdmin}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-              Fill Demo Admin (admin@eventform.com)
+              Fill Admin (admin@admin.com)
             </button>
-            <span className="text-[11px] text-slate-400">Pass: admin123</span>
+            <span className="text-[11px] text-slate-400 font-mono">Pass: admin@123</span>
           </div>
         </div>
 

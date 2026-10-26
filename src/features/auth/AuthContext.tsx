@@ -17,7 +17,7 @@ const STORAGE_AUTH_KEY = 'eventform_admin_session_v1';
 
 const DEFAULT_DEMO_ADMIN: UserProfile = {
   id: 'admin-1',
-  email: 'admin@eventform.com',
+  email: 'admin@admin.com',
   name: 'Hamza Dohadwala',
   role: 'admin',
   created_at: new Date().toISOString(),
@@ -104,22 +104,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Offline / Demo validation
-    if (password.length < 4) {
+    // Enforce strict administrator credentials restriction
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
+    if (cleanEmail !== 'admin@admin.com' || cleanPassword !== 'admin@123') {
       setIsLoading(false);
-      return { success: false, error: 'Password must be at least 4 characters long.' };
+      return {
+        success: false,
+        error: 'Invalid administrator credentials. Access restricted to authorized account (admin@admin.com).',
+      };
     }
 
-    const demoProfile: UserProfile = {
-      id: `admin-${Math.random().toString(36).substring(2, 8)}`,
-      email: email.trim().toLowerCase(),
-      name: email.split('@')[0].replace('.', ' ').toUpperCase(),
+    const adminProfile: UserProfile = {
+      id: 'admin-primary',
+      email: 'admin@admin.com',
+      name: 'Hamza Dohadwala',
       role: 'admin',
       created_at: new Date().toISOString(),
     };
 
-    setUser(demoProfile);
-    localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(demoProfile));
+    setUser(adminProfile);
+    localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(adminProfile));
     setIsLoading(false);
     return { success: true };
   };

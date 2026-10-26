@@ -367,6 +367,9 @@ function AppContent() {
       onLogout={handleLogout}
       adminName={user?.name}
       adminEmail={user?.email}
+      submissions={submissions}
+      forms={forms}
+      onSelectFormResponses={(id) => navigateToTab('responses', id)}
     >
       {/* TAB 1: DASHBOARD */}
       {currentTab === 'dashboard' && (

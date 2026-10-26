@@ -70,6 +70,49 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
       });
   }, [forms, searchTerm, statusFilter, sortBy, responseCounts]);
 
+  const [selectedFormIds, setSelectedFormIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const handleToggleSelect = (id: string, e: React.MouseEvent | React.ChangeEvent) => {
+    e.stopPropagation();
+    setSelectedFormIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedFormIds.length === filteredForms.length) {
+      setSelectedFormIds([]);
+    } else {
+      setSelectedFormIds(filteredForms.map((f) => f.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedFormIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Are you sure you want to delete ${selectedFormIds.length} selected forms? All associated submissions will be permanently removed.`
+      )
+    ) {
+      return;
+    }
+
+    setIsBulkDeleting(true);
+    const count = selectedFormIds.length;
+    try {
+      for (const id of selectedFormIds) {
+        await onDeleteForm(id);
+      }
+      setSelectedFormIds([]);
+      success('Forms Deleted', `${count} event forms were successfully deleted.`);
+    } catch {
+      error('Delete Failed', 'Failed to delete some of the selected forms.');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const handleDuplicate = async (id: string) => {
     setActionLoadingId(id);
     try {
@@ -89,6 +132,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
     setActionLoadingId(id);
     try {
       await onDeleteForm(id);
+      setSelectedFormIds((prev) => prev.filter((item) => item !== id));
       success('Form Deleted', `"${title}" has been deleted.`);
     } catch {
       error('Failed', 'Could not delete form.');
@@ -163,6 +207,45 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
         </div>
       </div>
 
+      {/* Bulk Selection Bar */}
+      {filteredForms.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 px-2 text-xs">
+          <label className="flex items-center gap-2 font-medium text-slate-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={selectedFormIds.length > 0 && selectedFormIds.length === filteredForms.length}
+              onChange={handleSelectAll}
+              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+            />
+            <span>Select All ({filteredForms.length} forms)</span>
+          </label>
+
+          {selectedFormIds.length > 0 && (
+            <div className="flex items-center gap-2.5 animate-fade-in">
+              <span className="text-slate-600 font-semibold">
+                {selectedFormIds.length} form{selectedFormIds.length > 1 ? 's' : ''} selected
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedFormIds([])}
+              >
+                Clear
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleBulkDelete}
+                isLoading={isBulkDeleting}
+                leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+              >
+                Delete Selected ({selectedFormIds.length})
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Forms Grid */}
       {filteredForms.length === 0 ? (
         <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-3">
@@ -176,16 +259,33 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredForms.map((form) => {
             const count = responseCounts[form.id] || 0;
+            const isSelected = selectedFormIds.includes(form.id);
             return (
               <div
                 key={form.id}
-                className="bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col group"
+                className={`bg-white rounded-2xl border ${
+                  isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-md' : 'border-slate-200/90'
+                } shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col group`}
               >
                 {/* Poster / Thumbnail */}
                 <div
                   className="h-36 w-full relative bg-slate-900 cursor-pointer overflow-hidden"
                   onClick={() => onEditForm(form.id)}
                 >
+                  {/* Form Selection Checkbox */}
+                  <div
+                    className="absolute top-3 left-3 z-20"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <label className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/95 hover:bg-white shadow-sm cursor-pointer transition-all border border-slate-300/80">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => handleToggleSelect(form.id, e)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                      />
+                    </label>
+                  </div>
                   {form.cover_image_url ? (
                     <img
                       src={form.cover_image_url}

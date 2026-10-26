@@ -213,25 +213,66 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     );
   }
 
+  const accentColor = theme.accentColor || '#4f46e5';
+
   // ACTIVE REGISTRATION FORM
   return (
-    <div className="min-h-screen py-6 sm:py-12 px-4 sm:px-6 bg-slate-50 font-sans">
-      <div className="max-w-2xl sm:max-w-3xl mx-auto space-y-6">
+    <div
+      className="min-h-screen py-6 sm:py-12 px-4 sm:px-6 font-sans relative overflow-x-hidden transition-colors duration-500"
+      style={{
+        backgroundColor: '#f8fafc',
+        backgroundImage: `radial-gradient(ellipse 90% 50% at 50% -15%, ${accentColor}28 0%, transparent 75%), radial-gradient(circle at 100% 100%, ${accentColor}12 0%, transparent 40%)`,
+      }}
+    >
+      {/* Ambient background glow orbs matching theme */}
+      <div
+        className="fixed -top-32 left-1/2 -translate-x-1/2 w-3/4 max-w-4xl h-80 rounded-full blur-3xl opacity-35 pointer-events-none -z-10"
+        style={{ backgroundColor: accentColor }}
+      />
+      <div
+        className="fixed -bottom-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-20 pointer-events-none -z-10"
+        style={{ backgroundColor: accentColor }}
+      />
+
+      <div className="max-w-2xl sm:max-w-3xl mx-auto space-y-6 relative z-10">
         {/* Event Header Banner Card */}
-        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
-          {form.cover_image_url && (
-            <div className="h-48 sm:h-64 w-full relative overflow-hidden bg-slate-900">
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-md overflow-hidden">
+          {form.cover_image_url ? (
+            <div className="relative w-full overflow-hidden bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[420px] sm:max-h-[480px]">
+              {/* Blurred background mirror to prevent letterbox voids */}
+              <div
+                className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-125 pointer-events-none"
+                style={{ backgroundImage: `url(${form.cover_image_url})` }}
+              />
               <img
                 src={form.cover_image_url}
                 alt={form.title}
-                className="w-full h-full object-cover"
+                className="w-full max-h-[420px] sm:max-h-[480px] object-contain relative z-10 mx-auto transition-transform duration-300"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
-              <div className="absolute bottom-5 left-6 right-6 text-white">
+              <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent pointer-events-none" />
+              <div className="absolute bottom-5 left-6 right-6 text-white z-30">
                 <span className="text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 inline-block mb-2">
                   Official Registration
                 </span>
-                <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight">
+                <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight drop-shadow-md">
+                  {form.title}
+                </h1>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="w-full relative overflow-hidden py-10 px-6 sm:px-8 text-white shadow-inner"
+              style={{
+                background: `linear-gradient(135deg, ${accentColor} 0%, #1e1b4b 100%)`,
+              }}
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.18),transparent_60%)] pointer-events-none" />
+              <div className="relative z-10 space-y-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/25 inline-flex items-center gap-1.5 shadow-sm">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Official Registration Portal
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight drop-shadow-sm">
                   {form.title}
                 </h1>
               </div>
@@ -239,12 +280,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           )}
 
           <div className="p-6 sm:p-8 space-y-5">
-            {!form.cover_image_url && (
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight">
-                {form.title}
-              </h1>
-            )}
-
             {form.description && (
               <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
                 {form.description}

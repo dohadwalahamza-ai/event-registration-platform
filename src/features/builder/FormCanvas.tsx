@@ -41,7 +41,13 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
   const fields = form.fields || [];
 
   return (
-    <div className="flex-1 bg-slate-100/70 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+    <div
+      className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto transition-colors duration-500"
+      style={{
+        backgroundColor: '#f1f5f9',
+        backgroundImage: `radial-gradient(ellipse at 50% 0%, ${form.theme_config?.accentColor || '#4f46e5'}18 0%, transparent 60%)`,
+      }}
+    >
       <div className="max-w-3xl mx-auto space-y-5">
         {/* Event Header Banner Card */}
         <div
