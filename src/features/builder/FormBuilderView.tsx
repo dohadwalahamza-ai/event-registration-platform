@@ -319,9 +319,11 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         isOpen={isBrandingOpen}
         onClose={() => setIsBrandingOpen(false)}
         form={form}
-        onSave={(updated) => {
+        onSave={async (updated) => {
           setForm(updated);
-          setHasUnsavedChanges(true);
+          await onSaveForm(updated);
+          setHasUnsavedChanges(false);
+          success('Settings Saved', 'Event details, branding, and theme background have been saved.');
         }}
       />
 
@@ -331,7 +333,20 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         onClose={() => setIsShareModalOpen(false)}
         form={form}
         onUpdateStatus={handleUpdateStatus}
-        onOpenLivePreview={() => onOpenLivePublicPage(form.slug)}
+        onOpenLivePreview={async () => {
+          if (hasUnsavedChanges) {
+            await onSaveForm(form);
+            setHasUnsavedChanges(false);
+          }
+          onOpenLivePublicPage(form.slug);
+        }}
+        onUpdateSlug={async (newSlug: string) => {
+          const updated = { ...form, slug: newSlug };
+          setForm(updated);
+          await onSaveForm(updated);
+          setHasUnsavedChanges(false);
+          success('Slug Updated', `Public URL is now /#/e/${newSlug}`);
+        }}
       />
     </div>
   );

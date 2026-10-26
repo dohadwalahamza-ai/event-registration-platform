@@ -78,6 +78,16 @@ export class StorageService {
             .filter((f: any) => !deletedIds.has(f.id))
             .map((f: any) => ({
               ...f,
+              theme_config:
+                typeof f.theme_config === 'string'
+                  ? (() => {
+                      try {
+                        return JSON.parse(f.theme_config);
+                      } catch {
+                        return f.theme_config;
+                      }
+                    })()
+                  : f.theme_config,
               fields: (f.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
             }));
         }
@@ -90,30 +100,59 @@ export class StorageService {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
       const list: Form[] = raw ? JSON.parse(raw) : SAMPLE_FORMS;
-      return list.filter((f) => !deletedIds.has(f.id));
+      return list
+        .filter((f) => !deletedIds.has(f.id))
+        .map((f) => ({
+          ...f,
+          theme_config:
+            typeof f.theme_config === 'string'
+              ? (() => {
+                  try {
+                    return JSON.parse(f.theme_config);
+                  } catch {
+                    return f.theme_config;
+                  }
+                })()
+              : f.theme_config,
+        }));
     } catch {
       return SAMPLE_FORMS.filter((f) => !deletedIds.has(f.id));
     }
   }
 
   /**
-   * Fetch a single form by unique slug
+   * Fetch a single form by unique slug or ID (supports shortened URLs like /e/mvpg1lhu)
    */
   static async getFormBySlug(slug: string): Promise<Form | null> {
     const deletedIds = getDeletedFormIds();
     const cleanSlug = decodeURIComponent(slug.trim()).toLowerCase().replace(/\/+$/, '');
+    const coreSlug = cleanSlug.replace(/^(event-form-|form-)/, '');
+
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
         const { data, error } = await supabase
           .from('forms')
           .select('*, fields:form_fields(*)')
-          .ilike('slug', cleanSlug)
-          .single();
+          .or(
+            `slug.ilike.${cleanSlug},id.eq.${cleanSlug},slug.ilike.event-form-${coreSlug},slug.ilike.form-${coreSlug},id.eq.form-${coreSlug},slug.ilike.${coreSlug}`
+          )
+          .limit(1)
+          .maybeSingle();
 
         if (!error && data && !deletedIds.has(data.id)) {
           return {
             ...data,
+            theme_config:
+              typeof data.theme_config === 'string'
+                ? (() => {
+                    try {
+                      return JSON.parse(data.theme_config);
+                    } catch {
+                      return data.theme_config;
+                    }
+                  })()
+                : data.theme_config,
             fields: (data.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
           };
         }
@@ -123,17 +162,35 @@ export class StorageService {
     }
 
     const forms = await this.getForms();
-    const found = forms.find((f) => f.slug.toLowerCase() === cleanSlug && !deletedIds.has(f.id));
+    const found = forms.find(
+      (f) =>
+        !deletedIds.has(f.id) &&
+        (f.slug.toLowerCase() === cleanSlug ||
+          f.id.toLowerCase() === cleanSlug ||
+          f.slug.toLowerCase() === `event-form-${coreSlug}` ||
+          f.slug.toLowerCase() === `form-${coreSlug}` ||
+          f.id.toLowerCase() === `form-${coreSlug}` ||
+          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
+          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
+    );
     if (found) return found;
 
     // Check pre-seeded forms directly
-    const seedFound = SAMPLE_FORMS.find((f) => f.slug.toLowerCase() === cleanSlug && !deletedIds.has(f.id));
+    const seedFound = SAMPLE_FORMS.find(
+      (f) =>
+        !deletedIds.has(f.id) &&
+        (f.slug.toLowerCase() === cleanSlug ||
+          f.id.toLowerCase() === cleanSlug ||
+          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
+    );
     if (seedFound) return seedFound;
 
-    // Dynamic fallback for any created event form slug (e.g. event-form-mvp862sx)
+    // Dynamic fallback for any created event form slug or short ID
     if (
-      (cleanSlug.startsWith('event-form-') || cleanSlug.startsWith('form-')) &&
-      !deletedIds.has(`form-${cleanSlug}`)
+      (cleanSlug.startsWith('event-form-') || cleanSlug.startsWith('form-') || coreSlug.length >= 4) &&
+      !deletedIds.has(`form-${cleanSlug}`) &&
+      !deletedIds.has(cleanSlug) &&
+      !deletedIds.has(`form-${coreSlug}`)
     ) {
       const fallbackForm: Form = {
         id: `form-${cleanSlug}`,
@@ -205,8 +262,19 @@ export class StorageService {
   static async getFormById(id: string): Promise<Form | null> {
     const deletedIds = getDeletedFormIds();
     if (deletedIds.has(id)) return null;
+    const clean = id.trim().toLowerCase();
+    const core = clean.replace(/^(event-form-|form-)/, '');
     const forms = await this.getForms();
-    return forms.find((f) => f.id === id) || null;
+    return (
+      forms.find(
+        (f) =>
+          !deletedIds.has(f.id) &&
+          (f.id.toLowerCase() === clean ||
+            f.slug.toLowerCase() === clean ||
+            f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === core ||
+            f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === core)
+      ) || null
+    );
   }
 
   /**

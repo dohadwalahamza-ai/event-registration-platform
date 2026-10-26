@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Form, FormField } from '../../types';
+import { Form, FormField, FormThemeConfig } from '../../types';
 import { FieldRenderer } from '../builder/FieldRenderer';
 import {
   evaluateFieldVisibility,
@@ -40,11 +40,21 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
   const [submissionId, setSubmissionId] = useState<string | null>(null);
 
   const fields = form.fields || [];
-  const theme = form.theme_config || {
-    accentColor: '#4f46e5',
-    headerStyle: 'banner',
-    borderRadius: 'xl',
-  };
+  const rawTheme = form.theme_config;
+  const theme: FormThemeConfig =
+    typeof rawTheme === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(rawTheme);
+          } catch {
+            return {};
+          }
+        })()
+      : rawTheme || {
+          accentColor: '#4f46e5',
+          headerStyle: 'banner',
+          borderRadius: 'xl',
+        };
 
   // Check if deadline passed
   const isDeadlinePassed =
@@ -247,11 +257,15 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           wrapperClass: 'text-slate-900',
           wrapperStyle: {
             backgroundColor: '#0b0f19',
+            backgroundImage: `linear-gradient(rgba(11, 15, 25, 0.72), rgba(11, 15, 25, 0.85)), url(${bannerImageUrl})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed',
           },
-          cardClass: 'bg-white/90 backdrop-blur-xl border border-white/50 text-slate-900 shadow-2xl',
+          cardClass: 'bg-white/95 backdrop-blur-xl border border-white/60 text-slate-900 shadow-2xl',
           headingClass: 'text-slate-950',
           descClass: 'text-slate-700',
-          metaBadgeClass: 'bg-white/80 border-slate-200 text-slate-800 shadow-xs',
+          metaBadgeClass: 'bg-white/90 border-slate-200 text-slate-800 shadow-xs',
           borderClass: 'border-slate-200/80',
           footerText: 'text-white/80',
         };
@@ -261,6 +275,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           wrapperClass: 'text-slate-900',
           wrapperStyle: {
             backgroundColor: theme.customBackgroundColor || '#0f172a',
+            backgroundImage: 'none',
           },
           cardClass: 'bg-white border-slate-200 text-slate-900 shadow-2xl',
           headingClass: 'text-slate-900',
@@ -380,27 +395,27 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     >
       {/* Banner Glass Ambient Background */}
       {atmosphere.isBannerGlass && (
-        <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none" aria-hidden="true">
           <div
             className="absolute inset-0 bg-cover bg-center filter blur-3xl scale-125 opacity-70"
             style={{ backgroundImage: `url(${bannerImageUrl})` }}
           />
-          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-xl" />
+          <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-2xl" />
         </div>
       )}
 
       {/* Ambient background glow orbs matching theme */}
       {!atmosphere.isBannerGlass && !atmosphere.isSolidColor && (
-        <>
+        <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none" aria-hidden="true">
           <div
-            className="fixed -top-32 left-1/2 -translate-x-1/2 w-3/4 max-w-4xl h-80 rounded-full blur-3xl opacity-35 pointer-events-none -z-10"
+            className="absolute -top-32 left-1/2 -translate-x-1/2 w-3/4 max-w-4xl h-80 rounded-full blur-3xl opacity-35"
             style={{ backgroundColor: accentColor }}
           />
           <div
-            className="fixed -bottom-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-20 pointer-events-none -z-10"
+            className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-20"
             style={{ backgroundColor: accentColor }}
           />
-        </>
+        </div>
       )}
 
       <div className="max-w-2xl sm:max-w-3xl mx-auto space-y-6 relative z-10">

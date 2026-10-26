@@ -39,8 +39,19 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
   onOpenFieldLibrary,
 }) => {
   const fields = form.fields || [];
-  const backgroundStyle = form.theme_config?.backgroundStyle || 'banner_glass';
-  const accentColor = form.theme_config?.accentColor || '#4f46e5';
+  const rawTheme = form.theme_config;
+  const theme =
+    typeof rawTheme === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(rawTheme);
+          } catch {
+            return {};
+          }
+        })()
+      : rawTheme || {};
+  const backgroundStyle = theme.backgroundStyle || 'banner_glass';
+  const accentColor = theme.accentColor || '#4f46e5';
 
   const bannerImageUrl =
     form.cover_image_url && form.cover_image_url.trim() !== ''

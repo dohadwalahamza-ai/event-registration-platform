@@ -18,11 +18,14 @@ import {
   Check,
   AlertTriangle,
   Loader2,
+  Share2,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
 import { Modal } from '../../generic-ui/components/Modal';
 import { useToast } from '../../generic-ui/ToastContext';
+import { PublishShareModal } from '../builder/PublishShareModal';
+import { StorageService } from '../../services/storage';
 
 interface FormsListViewProps {
   forms: Form[];
@@ -55,6 +58,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'closed'>('all');
   const [sortBy, setSortBy] = useState<'updated' | 'title' | 'responses'>('updated');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [sharingForm, setSharingForm] = useState<Form | null>(null);
   const { success, error } = useToast();
 
   // Delete confirmation modals state
@@ -399,6 +403,15 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
 
                       <button
                         type="button"
+                        onClick={() => setSharingForm(form)}
+                        className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        title="Share & Short Link"
+                      >
+                        <Share2 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => onOpenPublicUrl(form.slug)}
                         className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                         title="Open Public Link"
@@ -534,6 +547,25 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Share & Short Link Modal */}
+      {sharingForm && (
+        <PublishShareModal
+          isOpen={Boolean(sharingForm)}
+          onClose={() => setSharingForm(null)}
+          form={sharingForm}
+          onUpdateStatus={async (newStatus) => {
+            await onTogglePublish(sharingForm);
+            setSharingForm({ ...sharingForm, status: newStatus });
+          }}
+          onOpenLivePreview={() => onOpenPublicUrl(sharingForm.slug)}
+          onUpdateSlug={async (newSlug: string) => {
+            const updated = { ...sharingForm, slug: newSlug };
+            await StorageService.saveForm(updated);
+            setSharingForm(updated);
+          }}
+        />
       )}
     </div>
   );

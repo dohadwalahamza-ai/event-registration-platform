@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Form, FormThemeConfig } from '../../types';
 import { Modal } from '../../generic-ui/components/Modal';
 import { Button } from '../../generic-ui/components/Button';
@@ -49,6 +49,41 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   const [customBackgroundColor, setCustomBackgroundColor] = useState<string>(
     form.theme_config?.customBackgroundColor || '#0f172a'
   );
+
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(form.title);
+      setSlug(form.slug);
+      setDescription(form.description);
+      setCoverImageUrl(form.cover_image_url || '');
+      setEventDate(form.event_date || '');
+      setEventEndDate(form.event_end_date || '');
+      setVenue(form.venue || '');
+      setDeadline(form.registration_deadline || '');
+      setSuccessMessage(form.success_message);
+      setRedirectUrl(form.redirect_url || '');
+      const rawTheme = form.theme_config;
+      const parsedTheme: FormThemeConfig =
+        typeof rawTheme === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(rawTheme);
+              } catch {
+                return {};
+              }
+            })()
+          : rawTheme || {};
+      setThemeConfig({
+        accentColor: parsedTheme.accentColor || '#4f46e5',
+        headerStyle: parsedTheme.headerStyle || 'banner',
+        themeMode: parsedTheme.themeMode || 'light',
+        backgroundStyle: parsedTheme.backgroundStyle || 'banner_glass',
+        borderRadius: parsedTheme.borderRadius || 'xl',
+        customBackgroundColor: parsedTheme.customBackgroundColor || '#0f172a',
+      });
+      setCustomBackgroundColor(parsedTheme.customBackgroundColor || '#0f172a');
+    }
+  }, [isOpen, form]);
 
   const colorPresets = [
     { name: 'Indigo', value: '#4f46e5' },
