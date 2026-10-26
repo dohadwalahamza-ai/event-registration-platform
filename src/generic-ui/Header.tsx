@@ -5,14 +5,12 @@ import {
   Bell,
   Plus,
   ShieldCheck,
-  Database,
   LogOut,
   Settings,
   ChevronDown,
   UserCheck,
 } from 'lucide-react';
 import { Button } from './components/Button';
-import { Badge } from './components/Badge';
 
 export interface HeaderProps {
   onToggleMobileSidebar: () => void;
@@ -72,27 +70,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right section: actions, status, profile */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Backend Database Status indicator */}
-        <button
-          onClick={onOpenSettings}
-          title={
-            isSupabaseConnected
-              ? 'Connected to Supabase PostgreSQL'
-              : 'Operating in Offline / Local Mode (Click to configure Supabase)'
-          }
-          className="cursor-pointer"
-        >
-          <Badge
-            variant={isSupabaseConnected ? 'success' : 'info'}
-            dot
-            size="sm"
-            className="hidden md:inline-flex items-center gap-1.5 transition-all hover:opacity-85"
-          >
-            <Database className="w-3 h-3" />
-            <span>{isSupabaseConnected ? 'Supabase Live' : 'Local Storage Mode'}</span>
-          </Badge>
-        </button>
-
         {/* Quick Create Form Button */}
         <Button
           onClick={onCreateNewForm}
