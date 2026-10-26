@@ -12,6 +12,9 @@ export interface LayoutProps {
   isSupabaseConnected: boolean;
   onOpenSettings: () => void;
   onPreviewSampleEvent?: () => void;
+  onLogout?: () => void;
+  adminName?: string;
+  adminEmail?: string;
   children: React.ReactNode;
 }
 
@@ -24,6 +27,9 @@ export const Layout: React.FC<LayoutProps> = ({
   isSupabaseConnected,
   onOpenSettings,
   onPreviewSampleEvent,
+  onLogout,
+  adminName,
+  adminEmail,
   children,
 }) => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -39,6 +45,9 @@ export const Layout: React.FC<LayoutProps> = ({
         totalFormsCount={totalFormsCount}
         totalResponsesCount={totalResponsesCount}
         onPreviewSampleEvent={onPreviewSampleEvent}
+        onLogout={onLogout}
+        adminName={adminName}
+        adminEmail={adminEmail}
       />
 
       {/* Main Content Wrapper (offset for fixed sidebar on lg screens) */}
@@ -49,6 +58,9 @@ export const Layout: React.FC<LayoutProps> = ({
           onCreateNewForm={onCreateNewForm}
           isSupabaseConnected={isSupabaseConnected}
           onOpenSettings={onOpenSettings}
+          onLogout={onLogout || (() => {})}
+          adminName={adminName}
+          adminEmail={adminEmail}
         />
 
         {/* Page Content View */}

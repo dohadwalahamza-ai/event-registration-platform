@@ -1,5 +1,16 @@
-import React from 'react';
-import { Menu, Search, Bell, Plus, ShieldCheck, Database, ExternalLink } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Menu,
+  Search,
+  Bell,
+  Plus,
+  ShieldCheck,
+  Database,
+  LogOut,
+  Settings,
+  ChevronDown,
+  UserCheck,
+} from 'lucide-react';
 import { Button } from './components/Button';
 import { Badge } from './components/Badge';
 
@@ -8,7 +19,9 @@ export interface HeaderProps {
   onCreateNewForm: () => void;
   isSupabaseConnected: boolean;
   onOpenSettings: () => void;
+  onLogout?: () => void;
   adminName?: string;
+  adminEmail?: string;
   adminRole?: string;
 }
 
@@ -17,12 +30,27 @@ export const Header: React.FC<HeaderProps> = ({
   onCreateNewForm,
   isSupabaseConnected,
   onOpenSettings,
-  adminName = 'Admin Organizer',
+  onLogout,
+  adminName = 'Hamza Dohadwala',
+  adminEmail = 'admin@eventform.com',
   adminRole = 'Administrator',
 }) => {
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
-      {/* Left section: mobile hamburger & breadcrumb/search */}
+      {/* Left section: mobile hamburger & search */}
       <div className="flex items-center gap-3 sm:gap-4 flex-1 max-w-lg">
         <button
           onClick={onToggleMobileSidebar}
@@ -47,7 +75,11 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Backend Database Status indicator */}
         <button
           onClick={onOpenSettings}
-          title={isSupabaseConnected ? 'Connected to Supabase PostgreSQL' : 'Operating in Offline / Local Mode (Click to configure Supabase)'}
+          title={
+            isSupabaseConnected
+              ? 'Connected to Supabase PostgreSQL'
+              : 'Operating in Offline / Local Mode (Click to configure Supabase)'
+          }
           className="cursor-pointer"
         >
           <Badge
@@ -81,18 +113,66 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-indigo-600 ring-2 ring-white" />
         </button>
 
-        {/* Profile Card */}
-        <div className="flex items-center gap-2 pl-2 border-l border-slate-200/80">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-500 text-white font-bold flex items-center justify-center text-xs shadow-sm shadow-indigo-200">
-            {adminName.charAt(0)}
-          </div>
-          <div className="hidden lg:block text-left text-xs leading-tight">
-            <p className="font-semibold text-slate-800">{adminName}</p>
-            <p className="text-[11px] text-slate-400 flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3 text-indigo-500" />
-              {adminRole}
-            </p>
-          </div>
+        {/* Profile Card & Dropdown Menu */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setIsProfileOpen(!isProfileOpen)}
+            className="flex items-center gap-2 pl-2 py-1 pr-1.5 rounded-xl hover:bg-slate-100 transition-colors border-l border-slate-200/80"
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-500 text-white font-bold flex items-center justify-center text-xs shadow-sm shadow-indigo-200">
+              {adminName.charAt(0)}
+            </div>
+            <div className="hidden lg:block text-left text-xs leading-tight">
+              <p className="font-semibold text-slate-800">{adminName}</p>
+              <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-indigo-500" />
+                {adminRole}
+              </p>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden lg:block" />
+          </button>
+
+          {/* Dropdown Popover */}
+          {isProfileOpen && (
+            <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200/90 py-2 z-50 animate-fade-in text-xs">
+              <div className="px-4 py-3 border-b border-slate-100">
+                <p className="font-bold text-slate-900 truncate">{adminName}</p>
+                <p className="text-slate-500 truncate mt-0.5">{adminEmail}</p>
+                <div className="mt-2">
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                    <UserCheck className="w-3 h-3" />
+                    Verified Admin
+                  </span>
+                </div>
+              </div>
+
+              <div className="py-1">
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    onOpenSettings();
+                  }}
+                  className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2.5 text-slate-700 font-medium transition-colors"
+                >
+                  <Settings className="w-4 h-4 text-slate-400" />
+                  <span>Platform Settings</span>
+                </button>
+              </div>
+
+              <div className="pt-1 border-t border-slate-100">
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    onLogout?.();
+                  }}
+                  className="w-full text-left px-4 py-2 hover:bg-rose-50 flex items-center gap-2.5 text-rose-600 font-semibold transition-colors"
+                >
+                  <LogOut className="w-4 h-4 text-rose-500" />
+                  <span>Log Out of Dashboard</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

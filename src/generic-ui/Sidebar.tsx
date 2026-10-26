@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ExternalLink,
   X,
+  LogOut,
 } from 'lucide-react';
 import { Badge } from './components/Badge';
 
@@ -23,6 +24,9 @@ export interface SidebarProps {
   totalFormsCount: number;
   totalResponsesCount: number;
   onPreviewSampleEvent?: () => void;
+  onLogout?: () => void;
+  adminName?: string;
+  adminEmail?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -33,6 +37,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalFormsCount,
   totalResponsesCount,
   onPreviewSampleEvent,
+  onLogout,
+  adminName,
+  adminEmail,
 }) => {
   const navItems = [
     {
@@ -180,9 +187,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
+        {/* Admin User Card & Logout in Sidebar */}
+        <div className="p-3 mx-3 mb-3 rounded-2xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">
+              {(adminName || 'A').charAt(0)}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white truncate">{adminName || 'Admin'}</p>
+              <p className="text-[10px] text-slate-400 truncate">{adminEmail || 'admin@eventform.com'}</p>
+            </div>
+          </div>
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
+              title="Log Out of Admin Dashboard"
+              aria-label="Log Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         {/* Footer info in sidebar */}
-        <div className="p-4 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-          <span>Google Forms Alternative</span>
+        <div className="p-3 px-4 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+          <span>EventForm Core</span>
           <span className="font-mono text-slate-400">v1.2.0</span>
         </div>
       </aside>

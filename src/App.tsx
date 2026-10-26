@@ -5,6 +5,8 @@ import { getSupabaseClient } from './services/supabaseClient';
 import { Layout } from './generic-ui/Layout';
 import { NavigationTab } from './generic-ui/Sidebar';
 import { ToastProvider, useToast } from './generic-ui/ToastContext';
+import { AuthProvider, useAuth } from './features/auth/AuthContext';
+import { LoginPage } from './features/auth/LoginPage';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { FormsListView } from './features/forms/FormsListView';
 import { FormBuilderView } from './features/builder/FormBuilderView';
@@ -14,6 +16,7 @@ import { PublicRegistrationPage } from './features/public-registration/PublicReg
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
+  const { user, isAuthenticated, isLoading: isAuthLoading, logout } = useAuth();
   const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
   const [forms, setForms] = useState<Form[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -24,11 +27,12 @@ function AppContent() {
     totalRegistrations: 0,
     recentSubmissions: 0,
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isDataLoading, setIsDataLoading] = useState(true);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
 
   // Check URL hash for public page routes and admin deep linking
   const [publicSlug, setPublicSlug] = useState<string | null>(null);
+  const [isLoginRoute, setIsLoginRoute] = useState(false);
   const { success, error } = useToast();
 
   const parseRoute = () => {
@@ -42,6 +46,13 @@ function AppContent() {
       slug = path.replace('/e/', '').split('?')[0];
     }
     setPublicSlug(slug);
+
+    if (hash === '#/login') {
+      setIsLoginRoute(true);
+      return;
+    } else {
+      setIsLoginRoute(false);
+    }
 
     if (!slug) {
       if (hash.startsWith('#/forms')) {
@@ -65,6 +76,7 @@ function AppContent() {
   const navigateToTab = (tab: NavigationTab, formId?: string) => {
     setCurrentTab(tab);
     setPublicSlug(null);
+    setIsLoginRoute(false);
     if (formId) setActiveFormId(formId);
 
     if (tab === 'dashboard') window.location.hash = '#/dashboard';
@@ -85,7 +97,7 @@ function AppContent() {
   }, []);
 
   const loadData = async () => {
-    setIsLoading(true);
+    setIsDataLoading(true);
     try {
       const allForms = await StorageService.getForms();
       const allSubmissions = await StorageService.getAllSubmissions();
@@ -106,7 +118,7 @@ function AppContent() {
     } catch (e) {
       console.error('Failed to load storage data', e);
     } finally {
-      setIsLoading(false);
+      setIsDataLoading(false);
     }
   };
 
@@ -129,7 +141,7 @@ function AppContent() {
     const count = forms.length + 1;
     const newForm: Form = {
       id: newId,
-      owner_id: 'admin-1',
+      owner_id: user?.id || 'admin-1',
       title: `New Event Registration Form ${count}`,
       slug: `event-form-${Date.now().toString(36)}`,
       description: 'Fill out this form to register for the upcoming event.',
@@ -181,7 +193,7 @@ function AppContent() {
     const saved = await StorageService.saveForm(newForm);
     setForms((prev) => [saved, ...prev]);
     setActiveFormId(saved.id);
-    setCurrentTab('new-form');
+    navigateToTab('new-form', saved.id);
     success('Form Initialized', 'Start customizing fields and settings.');
   };
 
@@ -228,7 +240,14 @@ function AppContent() {
     window.location.hash = `/e/${slug}`;
   };
 
-  // PUBLIC REGISTRATION ROUTE
+  // Handle logout
+  const handleLogout = async () => {
+    await logout();
+    success('Logged Out', 'You have been safely signed out.');
+    window.location.hash = '#/login';
+  };
+
+  // 1. PUBLIC REGISTRATION ROUTE (Accessible without login)
   if (publicSlug) {
     const publicForm = forms.find((f) => f.slug.toLowerCase() === publicSlug.toLowerCase());
 
@@ -278,20 +297,32 @@ function AppContent() {
     );
   }
 
-  // Active form for builder or responses
-  const activeForm = forms.find((f) => f.id === activeFormId) || forms[0];
-
-  if (isLoading) {
+  // 2. LOADING STATE
+  if (isAuthLoading || isDataLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-          <span className="text-xs font-medium text-slate-500">Loading EventForm Platform...</span>
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="flex flex-col items-center gap-3 text-white">
+          <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+          <span className="text-xs font-medium text-slate-400">Loading EventForm Platform...</span>
         </div>
       </div>
     );
   }
 
+  // 3. ADMIN AUTHENTICATION GUARD
+  if (!isAuthenticated || isLoginRoute) {
+    return (
+      <LoginPage
+        onSuccess={() => navigateToTab('dashboard')}
+        onViewSamplePublicEvent={() => handleOpenPublicUrl(forms[0]?.slug || 'kpcl-season-5')}
+      />
+    );
+  }
+
+  // Active form for builder or responses
+  const activeForm = forms.find((f) => f.id === activeFormId) || forms[0];
+
+  // 4. AUTHENTICATED ADMIN DASHBOARD
   return (
     <Layout
       currentTab={currentTab}
@@ -308,6 +339,9 @@ function AppContent() {
       isSupabaseConnected={isSupabaseConnected}
       onOpenSettings={() => navigateToTab('settings')}
       onPreviewSampleEvent={() => handleOpenPublicUrl(forms[0]?.slug || 'kpcl-season-5')}
+      onLogout={handleLogout}
+      adminName={user?.name}
+      adminEmail={user?.email}
     >
       {/* TAB 1: DASHBOARD */}
       {currentTab === 'dashboard' && (
@@ -379,7 +413,9 @@ function AppContent() {
 export default function App() {
   return (
     <ToastProvider>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </ToastProvider>
   );
 }
