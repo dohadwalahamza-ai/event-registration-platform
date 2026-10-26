@@ -387,7 +387,7 @@ export const SAMPLE_FORMS: Form[] = [
         field_key: 'passport_photo',
         label: 'Upload Recent Passport Size Photo',
         field_type: 'photo_upload',
-        required: true,
+        required: false,
         sort_order: 19,
         description: 'Clear frontal face photo in sports jersey or white shirt.',
         validation_rules: {

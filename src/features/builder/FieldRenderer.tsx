@@ -419,22 +419,37 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                 )}
               </div>
             ) : (
-              <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-slate-50/70 hover:bg-slate-50 rounded-2xl cursor-pointer transition-all group">
-                <Camera className="w-8 h-8 text-slate-400 group-hover:text-indigo-600 mb-2 transition-colors" />
-                <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-600">
-                  Click or drag photo here
-                </span>
-                <span className="text-[11px] text-slate-400 mt-0.5">
-                  JPG, PNG or WebP up to 5MB
-                </span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={disabled}
-                  onChange={(e) => handleFileUpload(e, true)}
-                  className="hidden"
-                />
-              </label>
+              <div className="flex flex-col items-center">
+                <label className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-slate-50/70 hover:bg-slate-50 rounded-2xl cursor-pointer transition-all group">
+                  <Camera className="w-8 h-8 text-slate-400 group-hover:text-indigo-600 mb-2 transition-colors" />
+                  <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-600">
+                    Click or drag photo here
+                  </span>
+                  <span className="text-[11px] text-slate-400 mt-0.5">
+                    JPG, PNG or WebP up to 5MB
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={disabled}
+                    onChange={(e) => handleFileUpload(e, true)}
+                    className="hidden"
+                  />
+                </label>
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sampleImg = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80';
+                      setPhotoPreview(sampleImg);
+                      onChange?.(sampleImg);
+                    }}
+                    className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium hover:underline cursor-pointer"
+                  >
+                    + Or use sample player photo
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
