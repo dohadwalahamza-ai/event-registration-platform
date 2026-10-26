@@ -273,28 +273,7 @@ function AppContent() {
       );
     }
 
-    return (
-      <div className="relative">
-        {/* Floating Top Banner to switch back to Admin for convenience */}
-        <div className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md text-white text-xs px-4 py-2 flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-medium">Public Participant View: /e/{publicForm.slug}</span>
-          </div>
-          <button
-            onClick={() => {
-              window.location.hash = '';
-              setPublicSlug(null);
-            }}
-            className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-[11px] transition-colors"
-          >
-            ← Admin Dashboard
-          </button>
-        </div>
-
-        <PublicRegistrationPage form={publicForm} />
-      </div>
-    );
+    return <PublicRegistrationPage form={publicForm} />;
   }
 
   // 2. LOADING STATE

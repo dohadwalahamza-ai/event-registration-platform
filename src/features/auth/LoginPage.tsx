@@ -5,11 +5,9 @@ import {
   CalendarCheck2,
   Lock,
   Mail,
-  User,
   Eye,
   EyeOff,
   ArrowRight,
-  ShieldCheck,
   Sparkles,
   ExternalLink,
 } from 'lucide-react';
@@ -24,15 +22,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onSuccess,
   onViewSamplePublicEvent,
 }) => {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('admin@eventform.com');
   const [password, setPassword] = useState('admin123');
-  const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const { login, signup } = useAuth();
+  const { login } = useAuth();
   const { success } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,27 +36,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setErrorMessage(null);
     setIsLoading(true);
 
-    if (mode === 'login') {
-      const result = await login(email, password);
-      if (result.success) {
-        success('Welcome Back!', 'Logged in as Event Administrator.');
-        onSuccess();
-      } else {
-        setErrorMessage(result.error || 'Invalid email or password.');
-      }
+    const result = await login(email, password);
+    if (result.success) {
+      success('Welcome Back!', 'Logged in as Event Administrator.');
+      onSuccess();
     } else {
-      if (!name.trim()) {
-        setErrorMessage('Please provide your name.');
-        setIsLoading(false);
-        return;
-      }
-      const result = await signup(email, password, name);
-      if (result.success) {
-        success('Account Created', 'Logged in as new Event Administrator.');
-        onSuccess();
-      } else {
-        setErrorMessage(result.error || 'Failed to create account.');
-      }
+      setErrorMessage(result.error || 'Invalid email or password.');
     }
     setIsLoading(false);
   };
@@ -68,7 +49,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const handleQuickDemoAdmin = () => {
     setEmail('admin@eventform.com');
     setPassword('admin123');
-    setMode('login');
   };
 
   return (
@@ -94,36 +74,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
         {/* Auth Card */}
         <div className="mt-8 bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-700/30 space-y-6">
-          {/* Mode Switcher */}
-          <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => {
-                setMode('login');
-                setErrorMessage(null);
-              }}
-              className={`py-2 rounded-lg transition-all ${
-                mode === 'login'
-                  ? 'bg-white text-indigo-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Administrator Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signup');
-                setErrorMessage(null);
-              }}
-              className={`py-2 rounded-lg transition-all ${
-                mode === 'signup'
-                  ? 'bg-white text-indigo-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Create Account
-            </button>
+          <div className="border-b border-slate-100 pb-3">
+            <h2 className="text-base font-bold text-slate-900">Administrator Sign In</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Enter your admin credentials to access your forms and responses.
+            </p>
           </div>
 
           {/* Error alert */}
@@ -135,25 +90,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            {mode === 'signup' && (
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Rahul Sharma"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
-                  />
-                </div>
-              </div>
-            )}
-
             <div>
               <label className="block text-slate-700 font-semibold mb-1">
                 Admin Work Email
@@ -189,6 +125,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -203,7 +140,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               rightIcon={<ArrowRight className="w-4 h-4" />}
               className="w-full py-2.5"
             >
-              {mode === 'login' ? 'Sign In to Dashboard' : 'Create Admin Account'}
+              Sign In to Dashboard
             </Button>
           </form>
 
@@ -224,7 +161,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         {/* Public Visitor Notice */}
         <div className="mt-6 text-center space-y-2">
           <p className="text-xs text-slate-400">
-            Are you a cricket player or participant registering for an event?
+            Are you a participant registering for an event?
           </p>
           <button
             onClick={onViewSamplePublicEvent}
