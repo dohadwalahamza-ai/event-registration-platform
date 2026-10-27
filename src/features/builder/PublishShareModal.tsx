@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '../../generic-ui/components/Badge';
 import { useToast } from '../../generic-ui/ToastContext';
+import { packFormToUrlPayload } from '../../services/storage';
 
 interface PublishShareModalProps {
   isOpen: boolean;
@@ -48,11 +49,15 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
   const activeSlug = form.slug || shortCode;
   const domainShortUrl = `${baseUrl}/#/e/${activeSlug}`;
 
+  // Pack compact form definition into query param so ANY scanning phone or link recipient loads it immediately
+  const packedPayload = packFormToUrlPayload(form);
+  const selfContainedUrl = packedPayload ? `${domainShortUrl}?d=${packedPayload}` : domainShortUrl;
+
   // Automatically fetch an ultra-short TinyURL link when opened (only on production/public domains)
   useEffect(() => {
     if (isOpen && !isLocalhost && !baseUrl.includes('localhost')) {
       setIsLoadingTiny(true);
-      fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(domainShortUrl)}`)
+      fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(selfContainedUrl)}`)
         .then((res) => res.text())
         .then((text) => {
           if (text && text.trim().startsWith('http')) {
@@ -60,7 +65,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
           }
         })
         .catch(() => {
-          // fallback to clean domain short url
+          // fallback to self-contained domain short url
         })
         .finally(() => {
           setIsLoadingTiny(false);
@@ -68,10 +73,10 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
     } else {
       setTinyUrl('');
     }
-  }, [isOpen, domainShortUrl, isLocalhost, baseUrl]);
+  }, [isOpen, selfContainedUrl, isLocalhost, baseUrl]);
 
-  // Primary short URL for 1-click sharing
-  const activeShortUrl = tinyUrl || domainShortUrl;
+  // Primary short URL for 1-click sharing (TinyURL if available, otherwise self-contained short URL)
+  const activeShortUrl = tinyUrl || selfContainedUrl;
 
   const handleCopyLink = (url: string) => {
     navigator.clipboard.writeText(url);
@@ -104,8 +109,9 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
     }
   };
 
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
-    activeShortUrl
+  const qrTargetUrl = tinyUrl || selfContainedUrl;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(
+    qrTargetUrl
   )}`;
 
   return (
