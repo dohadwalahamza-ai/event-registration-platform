@@ -12,6 +12,8 @@ import {
   Clock,
   ArrowRight,
   ExternalLink,
+  Trash2,
+  CheckCheck,
 } from 'lucide-react';
 import { Button } from './components/Button';
 import { Form, Submission } from '../types';
@@ -28,6 +30,9 @@ export interface HeaderProps {
   forms?: Form[];
   onSelectFormResponses?: (formId: string) => void;
 }
+
+const NOTIF_VIEWED_KEY = 'event_reg_notif_viewed_ts';
+const NOTIF_CLEARED_KEY = 'event_reg_notif_cleared_ts';
 
 function formatTimeAgo(dateString: string): string {
   try {
@@ -58,11 +63,74 @@ export const Header: React.FC<HeaderProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
+  // Timestamp tracking for clear / viewed state
+  const [lastViewedTs, setLastViewedTs] = useState<number>(() => {
+    try {
+      return parseInt(localStorage.getItem(NOTIF_VIEWED_KEY) || '0', 10);
+    } catch {
+      return 0;
+    }
+  });
+
+  const [clearedTs, setClearedTs] = useState<number>(() => {
+    try {
+      return parseInt(localStorage.getItem(NOTIF_CLEARED_KEY) || '0', 10);
+    } catch {
+      return 0;
+    }
+  });
+
+  // Filter out any submissions that were cleared before
+  const activeSubmissions = useMemo(() => {
+    return submissions.filter((s) => {
+      if (!clearedTs) return true;
+      const t = new Date(s.submitted_at).getTime();
+      return t > clearedTs;
+    });
+  }, [submissions, clearedTs]);
+
   const recentSubmissions = useMemo(() => {
-    return [...submissions]
+    return [...activeSubmissions]
       .sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())
       .slice(0, 8);
-  }, [submissions]);
+  }, [activeSubmissions]);
+
+  // Unread badge count: submissions newer than lastViewedTs
+  const unreadCount = useMemo(() => {
+    return activeSubmissions.filter((s) => {
+      const t = new Date(s.submitted_at).getTime();
+      return t > lastViewedTs;
+    }).length;
+  }, [activeSubmissions, lastViewedTs]);
+
+  // When clicking bell icon: toggle popup AND remove count immediately
+  const handleToggleNotifications = () => {
+    const nextState = !isNotificationsOpen;
+    setIsNotificationsOpen(nextState);
+    if (nextState) {
+      const now = Date.now();
+      setLastViewedTs(now);
+      try {
+        localStorage.setItem(NOTIF_VIEWED_KEY, String(now));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  // Clear all notifications
+  const handleClearNotifications = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const now = Date.now();
+    setClearedTs(now);
+    setLastViewedTs(now);
+    try {
+      localStorage.setItem(NOTIF_CLEARED_KEY, String(now));
+      localStorage.setItem(NOTIF_VIEWED_KEY, String(now));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const formTitleMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -113,7 +181,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Notification Bell with Responses Dropdown */}
         <div className="relative" ref={notifRef}>
           <button
-            onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+            onClick={handleToggleNotifications}
             className={`relative p-2 rounded-xl transition-colors cursor-pointer ${
               isNotificationsOpen
                 ? 'bg-indigo-50 text-indigo-600'
@@ -122,9 +190,9 @@ export const Header: React.FC<HeaderProps> = ({
             aria-label="View recent response notifications"
           >
             <Bell className="w-4 h-4" />
-            {recentSubmissions.length > 0 && (
+            {unreadCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-indigo-600 text-[10px] font-bold text-white flex items-center justify-center ring-2 ring-white shadow-xs">
-                {recentSubmissions.length}
+                {unreadCount}
               </span>
             )}
           </button>
@@ -137,16 +205,31 @@ export const Header: React.FC<HeaderProps> = ({
                   <Inbox className="w-4 h-4 text-indigo-600" />
                   <span>Submitted Responses</span>
                 </div>
-                <span className="text-[11px] font-medium text-slate-400">
-                  {recentSubmissions.length} recent
-                </span>
+                <div className="flex items-center gap-2">
+                  {recentSubmissions.length > 0 && (
+                    <button
+                      onClick={handleClearNotifications}
+                      className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 px-2 py-0.5 rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Clear notifications"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Clear Notification</span>
+                    </button>
+                  )}
+                  <span className="text-[11px] font-medium text-slate-400">
+                    {recentSubmissions.length} recent
+                  </span>
+                </div>
               </div>
 
               <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
                 {recentSubmissions.length === 0 ? (
                   <div className="py-8 px-4 text-center text-slate-400 space-y-1">
-                    <p className="font-medium text-slate-600 text-xs">No responses yet</p>
-                    <p className="text-[11px]">When participants submit your forms, their responses will appear here in real time.</p>
+                    <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-2">
+                      <CheckCheck className="w-4 h-4 text-slate-500" />
+                    </div>
+                    <p className="font-semibold text-slate-700 text-xs">No notifications</p>
+                    <p className="text-[11px]">When participants submit your forms, new responses will appear here.</p>
                   </div>
                 ) : (
                   recentSubmissions.map((sub) => {
