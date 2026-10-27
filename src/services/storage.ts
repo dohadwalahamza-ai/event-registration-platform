@@ -457,12 +457,12 @@ export class StorageService {
           }
         }
 
-        // Broad fallback search in Supabase if specific candidate didn't match
+        // Exact fallback search in Supabase if specific candidate didn't match
         if (!formData) {
           const { data: allRows } = await supabase
             .from('forms')
             .select('*')
-            .limit(50);
+            .limit(100);
           if (allRows && Array.isArray(allRows)) {
             formData = allRows.find((r: any) => {
               if (deletedIds.has(r.id)) return false;
@@ -471,10 +471,10 @@ export class StorageService {
               return (
                 fs === cleanSlug ||
                 fi === cleanSlug ||
+                fs === `event-form-${coreSlug}` ||
+                fi === `form-${coreSlug}` ||
                 fs.replace(/^(event-form-|form-)/, '') === coreSlug ||
-                fi.replace(/^(event-form-|form-)/, '') === coreSlug ||
-                (coreSlug.length >= 4 && fs.includes(coreSlug)) ||
-                (coreSlug.length >= 4 && fi.includes(coreSlug))
+                fi.replace(/^(event-form-|form-)/, '') === coreSlug
               );
             });
           }
@@ -546,10 +546,8 @@ export class StorageService {
           f.slug.toLowerCase() === `event-form-${coreSlug}` ||
           f.slug.toLowerCase() === `form-${coreSlug}` ||
           f.id.toLowerCase() === `form-${coreSlug}` ||
-          (coreSlug.length >= 3 && f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug) ||
-          (coreSlug.length >= 3 && f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug) ||
-          (cleanSlug.length >= 4 && f.slug.toLowerCase().includes(cleanSlug)) ||
-          (cleanSlug.length >= 4 && cleanSlug.includes(f.slug.toLowerCase())))
+          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
+          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
     );
 
     if (localFound) return localFound;
@@ -569,7 +567,7 @@ export class StorageService {
       if (match) return match;
     } catch {}
 
-    // 5. Standalone instant recovery for event slugs (e.g. mvph0jx2, mvqbgcvt, or upcoming forms)
+    // 5. Standalone instant recovery for event slugs
     // Ensures a clean, working registration form opens immediately without blocking errors
     if (
       !deletedIds.has(cleanSlug) &&
@@ -577,8 +575,8 @@ export class StorageService {
       !deletedIds.has(`form-${coreSlug}`) &&
       (cleanSlug.startsWith('event-form-') || cleanSlug.startsWith('form-') || coreSlug.length >= 3)
     ) {
-      const isKclForm = cleanSlug.includes('mvq') || coreSlug.includes('mvq');
-      const recoveredForm: Form = isKclForm
+      const isKclOwnerForm = cleanSlug === 'event-form-mvqecm9w' || coreSlug === 'mvqecm9w';
+      const recoveredForm: Form = isKclOwnerForm
         ? {
             id: `form-${coreSlug}`,
             owner_id: 'organizer',
@@ -752,7 +750,6 @@ export class StorageService {
 
       for (const form of forms) {
         if (deletedIds.has(form.id)) continue;
-        if (form.id === 'form-kpcl-season-5' || form.id === 'form-robotics-ai-hackathon') continue;
 
         try {
           const { error: formError } = await supabase.from('forms').upsert({

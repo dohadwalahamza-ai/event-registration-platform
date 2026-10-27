@@ -45,12 +45,15 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
   const { success } = useToast();
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && form) {
+      // Immediately save this specific form to Supabase so its QR code and link open this exact form
+      StorageService.saveForm(form).catch(() => {});
+
       StorageService.checkSupabaseWriteStatus().then((res) => {
         setSyncStatus({ checked: true, rlsBlocked: res.rlsBlocked });
       });
     }
-  }, [isOpen]);
+  }, [isOpen, form]);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://event.khargharjamaat.org';
 

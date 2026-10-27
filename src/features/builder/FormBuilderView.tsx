@@ -336,7 +336,10 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setIsShareModalOpen(true)}
+              onClick={async () => {
+                await onSaveForm(form);
+                setIsShareModalOpen(true);
+              }}
               leftIcon={<Share2 className="w-3.5 h-3.5 text-indigo-600" />}
             >
               Share
