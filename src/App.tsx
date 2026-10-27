@@ -29,13 +29,14 @@ function AppContent() {
   });
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
+  const [newDraftForm, setNewDraftForm] = useState<Form | null>(null);
 
   // Check URL hash for public page routes and admin deep linking
   const [publicSlug, setPublicSlug] = useState<string | null>(null);
   const [publicForm, setPublicForm] = useState<Form | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
   const [isLoginRoute, setIsLoginRoute] = useState(false);
-  const { success, error } = useToast();
+  const { success, error, info } = useToast();
 
   const parseRoute = () => {
     const hash = window.location.hash;
@@ -60,16 +61,22 @@ function AppContent() {
 
     if (!slug) {
       if (hash.startsWith('#/forms')) {
+        setNewDraftForm(null);
         setCurrentTab('forms');
       } else if (hash.startsWith('#/builder')) {
         const parts = hash.split('/');
-        if (parts[2]) setActiveFormId(parts[2]);
+        if (parts[2]) {
+          setActiveFormId(parts[2]);
+          setNewDraftForm((prev) => (prev && prev.id === parts[2] ? prev : null));
+        }
         setCurrentTab('new-form');
       } else if (hash.startsWith('#/responses')) {
+        setNewDraftForm(null);
         const parts = hash.split('/');
         if (parts[2]) setActiveFormId(parts[2]);
         setCurrentTab('responses');
       } else if (hash === '' || hash === '#' || hash.startsWith('#/dashboard')) {
+        setNewDraftForm(null);
         setCurrentTab('dashboard');
       }
     }
@@ -223,6 +230,8 @@ function AppContent() {
           return [updated, ...prev];
         });
 
+        setNewDraftForm((prev) => (prev && prev.id === updated.id ? null : prev));
+
         if (publicSlug) {
           const clean = publicSlug.toLowerCase().replace(/^(event-form-|form-)/, '');
           const updatedCore = (updated.slug || updated.id).toLowerCase().replace(/^(event-form-|form-)/, '');
@@ -252,8 +261,8 @@ function AppContent() {
     return counts;
   }, [forms, submissions]);
 
-  // Handle creating a new form
-  const handleCreateNewForm = async () => {
+  // Handle creating a new form - kept in-memory until user clicks "Save as Draft" or "Publish Event"
+  const handleCreateNewForm = () => {
     const newId = `form-${Date.now().toString(36)}`;
     const count = forms.length + 1;
     const newForm: Form = {
@@ -267,7 +276,7 @@ function AppContent() {
       event_date: '2026-11-20T10:00',
       venue: 'Grand Convention Center, Main Exhibition Hall',
       registration_deadline: '2026-11-18T23:59',
-      status: 'published',
+      status: 'draft',
       theme_config: {
         accentColor: '#4f46e5',
         headerStyle: 'banner',
@@ -313,17 +322,28 @@ function AppContent() {
       ],
     };
 
-    const saved = await StorageService.saveForm(newForm);
-    setForms((prev) => (prev.some((f) => f.id === saved.id) ? prev : [saved, ...prev]));
-    setActiveFormId(saved.id);
-    navigateToTab('new-form', saved.id);
-    success('Form Initialized', 'Start customizing fields and settings.');
+    // Keep only in memory until explicitly saved via "Save as Draft" or "Publish Event"
+    setNewDraftForm(newForm);
+    setActiveFormId(newId);
+    navigateToTab('new-form', newId);
+    info('New Draft Created', 'Click "Save as Draft" to add this form to All Forms.');
   };
 
   // Handle saving form from builder
   const handleSaveForm = async (updated: Form) => {
     const saved = await StorageService.saveForm(updated);
-    setForms((prev) => prev.map((f) => (f.id === saved.id ? saved : f)));
+    setForms((prev) => {
+      const idx = prev.findIndex((f) => f.id === saved.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = saved;
+        return next;
+      }
+      return [saved, ...prev];
+    });
+    if (newDraftForm && (newDraftForm.id === saved.id || newDraftForm.slug === saved.slug)) {
+      setNewDraftForm(null);
+    }
   };
 
   // Duplicate form
@@ -474,13 +494,15 @@ function AppContent() {
 
   // Active form for builder or responses (matching ID, slug, or core normalized ID)
   const activeForm =
-    forms.find(
-      (f) =>
-        f.id === activeFormId ||
-        f.slug === activeFormId ||
-        (activeFormId && f.id.replace(/^(event-form-|form-)/, '') === activeFormId.replace(/^(event-form-|form-)/, '')) ||
-        (activeFormId && f.slug.replace(/^(event-form-|form-)/, '') === activeFormId.replace(/^(event-form-|form-)/, ''))
-    ) || forms[0];
+    (newDraftForm && (activeFormId === newDraftForm.id || !activeFormId))
+      ? newDraftForm
+      : forms.find(
+          (f) =>
+            f.id === activeFormId ||
+            f.slug === activeFormId ||
+            (activeFormId && f.id.replace(/^(event-form-|form-)/, '') === activeFormId.replace(/^(event-form-|form-)/, '')) ||
+            (activeFormId && f.slug.replace(/^(event-form-|form-)/, '') === activeFormId.replace(/^(event-form-|form-)/, ''))
+        ) || (currentTab === 'new-form' && newDraftForm ? newDraftForm : forms[0]);
 
   // 4. AUTHENTICATED ADMIN DASHBOARD
   return (
@@ -490,6 +512,9 @@ function AppContent() {
         if (tab === 'new-form') {
           handleCreateNewForm();
         } else {
+          if (newDraftForm) {
+            setNewDraftForm(null);
+          }
           navigateToTab(tab);
         }
       }}
@@ -512,7 +537,10 @@ function AppContent() {
           forms={forms}
           recentSubmissions={submissions}
           onCreateNewForm={handleCreateNewForm}
-          onEditForm={(id) => navigateToTab('new-form', id)}
+          onEditForm={(id) => {
+            setNewDraftForm(null);
+            navigateToTab('new-form', id);
+          }}
           onViewResponses={(id) => navigateToTab('responses', id)}
           onOpenPublicLink={handleOpenPublicUrl}
         />
@@ -524,7 +552,10 @@ function AppContent() {
           forms={forms}
           responseCounts={responseCounts}
           onCreateNewForm={handleCreateNewForm}
-          onEditForm={(id) => navigateToTab('new-form', id)}
+          onEditForm={(id) => {
+            setNewDraftForm(null);
+            navigateToTab('new-form', id);
+          }}
           onPreviewForm={(id) => {
             const f = forms.find((form) => form.id === id);
             if (f) handleOpenPublicUrl(f.slug);
@@ -541,8 +572,15 @@ function AppContent() {
       {/* TAB 3: FORM BUILDER VIEW */}
       {currentTab === 'new-form' && activeForm && (
         <FormBuilderView
+          key={activeForm.id}
           initialForm={activeForm}
-          onBack={() => navigateToTab('forms')}
+          isNewDraft={Boolean(newDraftForm && newDraftForm.id === activeForm.id)}
+          onBack={() => {
+            if (newDraftForm && newDraftForm.id === activeForm.id) {
+              setNewDraftForm(null);
+            }
+            navigateToTab('forms');
+          }}
           onSaveForm={handleSaveForm}
           onViewResponses={(id) => navigateToTab('responses', id)}
           onOpenLivePublicPage={handleOpenPublicUrl}

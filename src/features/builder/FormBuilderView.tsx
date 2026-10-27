@@ -18,13 +18,17 @@ import {
   CheckCircle2,
   Inbox,
   AlertCircle,
+  FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
+import { Modal } from '../../generic-ui/components/Modal';
 import { useToast } from '../../generic-ui/ToastContext';
 
 interface FormBuilderViewProps {
   initialForm: Form;
+  isNewDraft?: boolean;
   onBack: () => void;
   onSaveForm: (form: Form) => Promise<void>;
   onViewResponses: (formId: string) => void;
@@ -33,6 +37,7 @@ interface FormBuilderViewProps {
 
 export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
   initialForm,
+  isNewDraft = false,
   onBack,
   onSaveForm,
   onViewResponses,
@@ -47,6 +52,8 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isDraftSaved, setIsDraftSaved] = useState(!isNewDraft);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const { success, error } = useToast();
 
   const fields = form.fields || [];
@@ -144,9 +151,44 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
     try {
       await onSaveForm(form);
       setHasUnsavedChanges(false);
-      success('Form Saved', 'All questions and configurations saved successfully.');
+      setIsDraftSaved(true);
+      success('Form Saved', `"${form.title}" saved successfully to All Forms.`);
     } catch (err) {
       error('Save Failed', 'Could not save form configuration.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Explicit Save as Draft
+  const handleSaveDraft = async () => {
+    setIsSaving(true);
+    try {
+      const draftForm: Form = { ...form, status: 'draft', updated_at: new Date().toISOString() };
+      setForm(draftForm);
+      await onSaveForm(draftForm);
+      setHasUnsavedChanges(false);
+      setIsDraftSaved(true);
+      success('Saved as Draft', `"${draftForm.title}" is saved as a draft and added to All Forms.`);
+    } catch {
+      error('Save Failed', 'Could not save form draft.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Explicit Publish Event
+  const handlePublish = async () => {
+    setIsSaving(true);
+    try {
+      const publishedForm: Form = { ...form, status: 'published', updated_at: new Date().toISOString() };
+      setForm(publishedForm);
+      await onSaveForm(publishedForm);
+      setHasUnsavedChanges(false);
+      setIsDraftSaved(true);
+      success('Event Published', `"${publishedForm.title}" is published and live in All Forms!`);
+    } catch {
+      error('Publish Failed', 'Could not publish form.');
     } finally {
       setIsSaving(false);
     }
@@ -156,12 +198,22 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
     const updated = { ...form, status: newStatus };
     setForm(updated);
     await onSaveForm(updated);
+    setIsDraftSaved(true);
+    setHasUnsavedChanges(false);
     success(
       `Status: ${newStatus.toUpperCase()}`,
       newStatus === 'published'
         ? 'Form is live and accepting submissions.'
         : 'Form status updated.'
     );
+  };
+
+  const handleBackClick = () => {
+    if (!isDraftSaved) {
+      setShowDiscardConfirm(true);
+    } else {
+      onBack();
+    }
   };
 
   return (
@@ -171,8 +223,8 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         {/* Left: Back & Title info */}
         <div className="flex items-center gap-3">
           <button
-            onClick={onBack}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+            onClick={handleBackClick}
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
             title="Back to All Forms"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -200,16 +252,18 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          {/* View Responses shortcut */}
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => onViewResponses(form.id)}
-            leftIcon={<Inbox className="w-3.5 h-3.5" />}
-            className="hidden sm:inline-flex"
-          >
-            Responses
-          </Button>
+          {/* View Responses shortcut (only if already saved in All Forms) */}
+          {isDraftSaved && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onViewResponses(form.id)}
+              leftIcon={<Inbox className="w-3.5 h-3.5" />}
+              className="hidden sm:inline-flex"
+            >
+              Responses
+            </Button>
+          )}
 
           {/* Event Branding & Theme */}
           <Button
@@ -237,28 +291,75 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             {isPreviewMode ? 'Edit Mode' : 'Preview'}
           </Button>
 
-          {/* Publish / Share Button */}
+          {/* Publish / Share Button (if already saved) */}
+          {isDraftSaved && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsShareModalOpen(true)}
+              leftIcon={<Share2 className="w-3.5 h-3.5 text-indigo-600" />}
+            >
+              Share
+            </Button>
+          )}
+
+          {/* Explicit Save as Draft Button */}
           <Button
             size="sm"
-            variant="outline"
-            onClick={() => setIsShareModalOpen(true)}
-            leftIcon={<Share2 className="w-3.5 h-3.5 text-indigo-600" />}
+            variant={!isDraftSaved || form.status === 'draft' ? 'primary' : 'outline'}
+            isLoading={isSaving}
+            onClick={handleSaveDraft}
+            leftIcon={<FileText className="w-3.5 h-3.5" />}
+            title="Save as Draft and add to All Forms"
           >
-            Share
+            Save as Draft
           </Button>
 
-          {/* Save Button */}
+          {/* Publish Event Button */}
           <Button
             size="sm"
-            variant="primary"
+            variant={form.status === 'published' ? 'primary' : 'outline'}
             isLoading={isSaving}
-            onClick={handleSave}
-            leftIcon={<Save className="w-3.5 h-3.5" />}
+            onClick={handlePublish}
+            leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+            title="Publish Event live"
           >
-            {hasUnsavedChanges ? 'Save Changes*' : 'Saved'}
+            {form.status === 'published' ? (hasUnsavedChanges ? 'Save Changes*' : 'Published') : 'Publish Event'}
           </Button>
         </div>
       </div>
+
+      {/* Unsaved Draft Banner Indicator */}
+      {!isDraftSaved && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900 shrink-0 z-20">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Unsaved New Form Draft:</strong> This form is not yet in <strong>All Forms</strong>. Click <strong>"Save as Draft"</strong> to save and add it to All Forms, or <strong>"Publish Event"</strong> to make it live.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSaveDraft}
+              isLoading={isSaving}
+              leftIcon={<FileText className="w-3.5 h-3.5 text-slate-600" />}
+            >
+              Save as Draft
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={handlePublish}
+              isLoading={isSaving}
+              leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+            >
+              Publish Event
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Main Builder Body */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -268,11 +369,11 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             <div className="max-w-3xl mx-auto mb-4 bg-indigo-50 border border-indigo-200 text-indigo-900 p-3 rounded-2xl flex items-center justify-between text-xs">
               <span className="flex items-center gap-2 font-semibold">
                 <Sparkles className="w-4 h-4 text-indigo-600" />
-                Live Participant Preview Mode — test your conditional logic in real time!
+                Live Participant Preview Mode — test your questions and theme in real time!
               </span>
               <button
                 onClick={() => setIsPreviewMode(false)}
-                className="font-bold underline hover:text-indigo-950"
+                className="font-bold underline hover:text-indigo-950 cursor-pointer"
               >
                 Back to Canvas
               </button>
@@ -314,6 +415,61 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         )}
       </div>
 
+      {/* Discard Confirmation Modal if unsaved draft */}
+      {showDiscardConfirm && (
+        <Modal
+          isOpen={showDiscardConfirm}
+          onClose={() => setShowDiscardConfirm(false)}
+          title="Exit Without Saving?"
+          description="This new form draft has not been saved as a draft yet."
+          maxWidth="md"
+          footer={
+            <div className="flex flex-wrap items-center justify-between w-full gap-2">
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => {
+                  setShowDiscardConfirm(false);
+                  onBack();
+                }}
+              >
+                Discard & Don't Add to All Forms
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDiscardConfirm(false)}
+                >
+                  Keep Editing
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={async () => {
+                    await handleSaveDraft();
+                    setShowDiscardConfirm(false);
+                    onBack();
+                  }}
+                >
+                  Save as Draft & Leave
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-xs text-amber-900">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">You have not saved this form.</p>
+              <p className="mt-0.5 text-amber-800 leading-relaxed">
+                If you discard now, this form will <strong>NOT</strong> appear in your <strong>All Forms</strong> list. To save it for later, choose <strong>Save as Draft & Leave</strong>.
+              </p>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Branding & Settings Modal */}
       <BrandingSettingsModal
         isOpen={isBrandingOpen}
@@ -322,6 +478,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         onSave={async (updated) => {
           setForm(updated);
           await onSaveForm(updated);
+          setIsDraftSaved(true);
           setHasUnsavedChanges(false);
           success('Settings Saved', 'Event details, branding, and theme background have been saved.');
         }}
@@ -334,8 +491,9 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         form={form}
         onUpdateStatus={handleUpdateStatus}
         onOpenLivePreview={async () => {
-          if (hasUnsavedChanges) {
+          if (hasUnsavedChanges || !isDraftSaved) {
             await onSaveForm(form);
+            setIsDraftSaved(true);
             setHasUnsavedChanges(false);
           }
           onOpenLivePublicPage(form.slug);
