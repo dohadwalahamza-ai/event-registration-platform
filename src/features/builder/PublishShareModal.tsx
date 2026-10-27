@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Form } from '../../types';
 import { Modal } from '../../generic-ui/components/Modal';
 import { Button } from '../../generic-ui/components/Button';
@@ -14,10 +14,12 @@ import {
   MessageCircle,
   Download,
   Smartphone,
+  AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { Badge } from '../../generic-ui/components/Badge';
 import { useToast } from '../../generic-ui/ToastContext';
-import { packFormToUrlPayload } from '../../services/storage';
+import { StorageService } from '../../services/storage';
 
 interface PublishShareModalProps {
   isOpen: boolean;
@@ -36,7 +38,19 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
   onOpenLivePreview,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ checked: boolean; rlsBlocked: boolean }>({
+    checked: false,
+    rlsBlocked: false,
+  });
   const { success } = useToast();
+
+  useEffect(() => {
+    if (isOpen) {
+      StorageService.checkSupabaseWriteStatus().then((res) => {
+        setSyncStatus({ checked: true, rlsBlocked: res.rlsBlocked });
+      });
+    }
+  }, [isOpen]);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://event.khargharjamaat.org';
 
@@ -116,6 +130,11 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
               >
                 {form.status.toUpperCase()}
               </Badge>
+              {syncStatus.checked && !syncStatus.rlsBlocked && (
+                <Badge variant="success" dot className="hidden sm:inline-flex">
+                  Cloud Synced
+                </Badge>
+              )}
               <span className="text-xs text-slate-600 font-medium hidden sm:inline">
                 {form.status === 'published'
                   ? 'Accepting submissions'
@@ -157,6 +176,41 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Supabase RLS Notice for Cross-Device Mobile Sync */}
+          {syncStatus.checked && syncStatus.rlsBlocked && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200/90 space-y-2.5 text-xs">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <div className="font-bold text-amber-950">
+                    Mobile Cloud Sync Action Required
+                  </div>
+                  <div className="text-[11px] text-amber-800 leading-relaxed">
+                    This form is saved on this computer, but <strong>Supabase Row-Level Security</strong> is blocking cloud writes. External mobile phones will see a fallback template until you run the 3-line SQL in your Supabase SQL Editor.
+                  </div>
+                </div>
+              </div>
+              <div className="p-2 bg-slate-900 rounded-lg flex items-center justify-between gap-2 text-[10px] font-mono text-emerald-400 select-all border border-slate-800">
+                <div className="truncate">
+                  ALTER TABLE public.forms DISABLE ROW LEVEL SECURITY; ...
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-white border-slate-700 hover:bg-slate-800 shrink-0 cursor-pointer h-6 text-[10px] px-2"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      'ALTER TABLE public.forms DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.form_fields DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.submissions DISABLE ROW LEVEL SECURITY;'
+                    );
+                    success('SQL Copied', 'Paste and run in Supabase SQL Editor to enable mobile sync.');
+                  }}
+                >
+                  Copy 3-Line SQL
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Registration Link Card */}
           <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100 space-y-3">

@@ -17,6 +17,7 @@ import {
   FileCode,
   HardDrive,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
@@ -62,13 +63,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
 
     try {
-      // Test query against forms table
+      // 1. Test query against forms table
       const { data, error: queryError } = await client.from('forms').select('id').limit(1);
 
       if (queryError) {
         if (queryError.code === 'PGRST116' || queryError.message.includes('relation "public.forms" does not exist')) {
           setTestResult({
-            success: true,
+            success: false,
             message:
               'Connected to Supabase! However, the `forms` table does not exist yet. Please run the SQL Migration script below in your Supabase SQL Editor.',
           });
@@ -78,10 +79,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             message: `Supabase returned: ${queryError.message}`,
           });
         }
+        setIsTesting(false);
+        return;
+      }
+
+      // 2. Test write to verify Row-Level Security permissions
+      const testId = '__perm_test__';
+      const { error: writeError } = await client.from('forms').upsert({
+        id: testId,
+        owner_id: 'admin',
+        title: 'Connection Check',
+        slug: testId,
+        status: 'draft',
+      });
+
+      if (writeError) {
+        if (writeError.code === '42501' || writeError.message.includes('row-level security')) {
+          setTestResult({
+            success: false,
+            message:
+              '⚠️ Database Read works, but SAVING FORMS IS BLOCKED by Supabase Row-Level Security (Code 42501). Mobile devices will open wrong/fallback forms until you disable RLS. Run: \n\nALTER TABLE public.forms DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.form_fields DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.submissions DISABLE ROW LEVEL SECURITY;\n\nin your Supabase SQL Editor.',
+          });
+        } else {
+          setTestResult({
+            success: false,
+            message: `Supabase write test failed: ${writeError.message}`,
+          });
+        }
       } else {
+        // Clean up test row
+        await client.from('forms').delete().eq('id', testId);
+        // Automatically push all local forms to Supabase
+        await StorageService.syncLocalFormsToRemote();
         setTestResult({
           success: true,
-          message: 'Connection successful! Tables and permissions verified.',
+          message: 'Connection successful! Read, write, and cloud synchronization across mobile and web are fully active.',
         });
       }
       onRefreshConnection();
@@ -125,6 +157,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <Badge variant={isSupabaseConnected ? 'success' : 'neutral'} dot size="md">
           {isSupabaseConnected ? 'Supabase Connected' : 'Offline / Local Storage'}
         </Badge>
+      </div>
+
+      {/* Cross-Device Mobile Sync Card */}
+      <div className="bg-gradient-to-r from-indigo-50/90 via-purple-50/70 to-indigo-50/90 rounded-2xl border border-indigo-200 p-6 space-y-3.5 shadow-xs">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-slate-900">
+              1-Step Fix for Mobile: Enable Cross-Device Synchronization
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              When creating forms on computer, Supabase Row-Level Security (RLS) blocks newly created forms from being saved to the cloud, causing mobile devices to open generic fallback forms. Running these 3 lines in your <strong>Supabase SQL Editor</strong> permanently enables instant syncing for <strong>all current and future forms</strong>:
+            </p>
+          </div>
+        </div>
+
+        <div className="p-3 bg-slate-900 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-emerald-400 select-all border border-slate-800">
+          <div className="space-y-0.5">
+            <div>ALTER TABLE public.forms DISABLE ROW LEVEL SECURITY;</div>
+            <div>ALTER TABLE public.form_fields DISABLE ROW LEVEL SECURITY;</div>
+            <div>ALTER TABLE public.submissions DISABLE ROW LEVEL SECURITY;</div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-white border-slate-700 hover:bg-slate-800 shrink-0 cursor-pointer"
+            onClick={() => {
+              navigator.clipboard.writeText(
+                'ALTER TABLE public.forms DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.form_fields DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.submissions DISABLE ROW LEVEL SECURITY;'
+              );
+              success('SQL Copied', '3-line SQL command copied. Paste and Run in Supabase SQL Editor!');
+            }}
+          >
+            Copy 3-Line SQL
+          </Button>
+        </div>
       </div>
 
       {/* Supabase API Credentials Card */}

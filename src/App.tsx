@@ -67,7 +67,7 @@ function AppContent() {
   const [publicForm, setPublicForm] = useState<Form | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState<boolean>(Boolean(initialSlug));
   const [isLoginRoute, setIsLoginRoute] = useState(false);
-  const { success, error, info } = useToast();
+  const { success, error, info, warning } = useToast();
 
   const parseRoute = () => {
     const slug = extractSlugFromUrl();
@@ -387,6 +387,16 @@ function AppContent() {
     if (newDraftForm && (newDraftForm.id === saved.id || newDraftForm.slug === saved.slug)) {
       setNewDraftForm(null);
     }
+
+    // Verify if cloud sync worked or was blocked by Supabase RLS
+    StorageService.checkSupabaseWriteStatus().then((res) => {
+      if (res.rlsBlocked) {
+        warning(
+          'Mobile Cloud Sync Pending',
+          'Form saved locally! To make it open on mobile phones, run the 3-line SQL in your Supabase SQL Editor.'
+        );
+      }
+    });
   };
 
   // Duplicate form
