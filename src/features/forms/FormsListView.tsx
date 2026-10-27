@@ -567,6 +567,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
       {/* Share & Short Link Modal */}
       {sharingForm && (
         <PublishShareModal
+          key={sharingForm.id}
           isOpen={Boolean(sharingForm)}
           onClose={() => setSharingForm(null)}
           form={sharingForm}

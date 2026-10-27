@@ -533,6 +533,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
 
       {/* Publish & Share Modal */}
       <PublishShareModal
+        key={form.id || form.slug}
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
         form={form}

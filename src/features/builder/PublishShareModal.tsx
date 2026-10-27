@@ -57,13 +57,9 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://event.khargharjamaat.org';
 
-  // Normalized clean slug
-  const shortCode = (form.slug || form.id).replace(/^(event-form-|form-)/, '');
-  const activeSlug = form.slug || shortCode;
-  const domainUrl = `${baseUrl}/#/e/${activeSlug}`;
-
-  // Clean public URL without long query payloads
-  const cleanUrl = domainUrl;
+  // Direct clean path URL without # fragment for 100% reliable mobile camera and QR scanner apps
+  const activeSlug = (form.slug || form.id).trim();
+  const cleanUrl = `${baseUrl}/e/${activeSlug}`;
 
   const handleCopyLink = (url: string) => {
     navigator.clipboard.writeText(url);
@@ -304,6 +300,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
 
           <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-200 inline-block">
             <img
+              key={cleanUrl}
               src={qrCodeUrl}
               alt="Event Registration QR Code"
               className="w-44 h-44 rounded-lg object-contain block mx-auto"
@@ -323,7 +320,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
 
           <a
             href={qrCodeUrl}
-            download={`${shortCode}-qr-code.png`}
+            download={`${activeSlug}-qr-code.png`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 shadow-2xs transition-colors"
