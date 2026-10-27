@@ -474,7 +474,16 @@ function AppContent() {
 
   // Open public page with clean URL
   const handleOpenPublicUrl = (slug: string) => {
-    window.location.hash = `/e/${slug}`;
+    const cleanSlug = (slug || '').trim().replace(/\/+$/, '');
+    const url = `/e/${cleanSlug}`;
+    try {
+      const win = window.open(url, '_blank');
+      if (!win) {
+        window.location.hash = `/e/${cleanSlug}`;
+      }
+    } catch {
+      window.location.hash = `/e/${cleanSlug}`;
+    }
   };
 
   // Handle logout

@@ -249,6 +249,12 @@ export function getFormPayloadFromUrl(): string | null {
   return null;
 }
 
+function sanitizeTimestamp(val: any): string | null {
+  if (!val || typeof val !== 'string' || !val.trim()) return null;
+  const d = new Date(val.trim());
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 export class StorageService {
   /**
    * Fetch all forms - seamlessly merges Supabase remote and local storage
@@ -626,24 +632,26 @@ export class StorageService {
         if (deletedIds.has(form.id)) continue;
 
         try {
-          const { error: formError } = await supabase.from('forms').upsert({
+          const formPayload = {
             id: form.id,
             owner_id: form.owner_id || 'admin',
-            title: form.title,
+            title: form.title || 'Untitled Event Form',
             slug: form.slug,
             description: form.description || '',
-            cover_image_url: form.cover_image_url,
-            event_date: form.event_date,
-            event_end_date: form.event_end_date,
-            venue: form.venue,
-            status: form.status,
-            registration_deadline: form.registration_deadline,
-            theme_config: form.theme_config,
-            success_message: form.success_message,
-            redirect_url: form.redirect_url,
+            cover_image_url: form.cover_image_url?.trim() || null,
+            event_date: sanitizeTimestamp(form.event_date),
+            event_end_date: sanitizeTimestamp(form.event_end_date),
+            venue: form.venue?.trim() || null,
+            status: form.status || 'published',
+            registration_deadline: sanitizeTimestamp(form.registration_deadline),
+            theme_config: form.theme_config || {},
+            success_message: form.success_message || 'Thank you! Your registration has been submitted successfully.',
+            redirect_url: form.redirect_url?.trim() || null,
             published_version: form.published_version || 1,
-            updated_at: form.updated_at,
-          });
+            updated_at: form.updated_at || new Date().toISOString(),
+          };
+
+          const { error: formError } = await supabase.from('forms').upsert(formPayload);
 
           if (!formError && form.fields && form.fields.length > 0) {
             await supabase.from('form_fields').delete().eq('form_id', form.id);
@@ -654,15 +662,15 @@ export class StorageService {
                 field_key: f.field_key,
                 label: f.label,
                 field_type: f.field_type,
-                description: f.description,
-                placeholder: f.placeholder,
-                required: f.required,
-                default_value: f.default_value,
-                options: f.options,
-                validation_rules: f.validation_rules,
-                conditional_rules: f.conditional_rules,
+                description: f.description?.trim() || null,
+                placeholder: f.placeholder?.trim() || null,
+                required: Boolean(f.required),
+                default_value: f.default_value ?? null,
+                options: f.options && Array.isArray(f.options) ? f.options : null,
+                validation_rules: f.validation_rules || null,
+                conditional_rules: f.conditional_rules || null,
                 sort_order: idx + 1,
-                configuration: f.configuration,
+                configuration: f.configuration || null,
               }))
             );
           }
@@ -708,48 +716,36 @@ export class StorageService {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        const formPayload = {
+          id: updatedForm.id,
+          owner_id: updatedForm.owner_id || 'admin',
+          title: updatedForm.title || 'Untitled Event Form',
+          slug: updatedForm.slug,
+          description: updatedForm.description || '',
+          cover_image_url: updatedForm.cover_image_url?.trim() || null,
+          event_date: sanitizeTimestamp(updatedForm.event_date),
+          event_end_date: sanitizeTimestamp(updatedForm.event_end_date),
+          venue: updatedForm.venue?.trim() || null,
+          status: updatedForm.status || 'published',
+          registration_deadline: sanitizeTimestamp(updatedForm.registration_deadline),
+          theme_config: updatedForm.theme_config || {},
+          success_message: updatedForm.success_message || 'Thank you! Your registration has been submitted successfully.',
+          redirect_url: updatedForm.redirect_url?.trim() || null,
+          published_version: updatedForm.published_version || 1,
+          updated_at: updatedForm.updated_at,
+        };
+
         // Save form row
         const { error: formError } = await supabase
           .from('forms')
-          .upsert({
-            id: updatedForm.id,
-            owner_id: updatedForm.owner_id || 'admin',
-            title: updatedForm.title,
-            slug: updatedForm.slug,
-            description: updatedForm.description || '',
-            cover_image_url: updatedForm.cover_image_url,
-            event_date: updatedForm.event_date,
-            event_end_date: updatedForm.event_end_date,
-            venue: updatedForm.venue,
-            status: updatedForm.status,
-            registration_deadline: updatedForm.registration_deadline,
-            theme_config: updatedForm.theme_config,
-            success_message: updatedForm.success_message,
-            redirect_url: updatedForm.redirect_url,
-            published_version: updatedForm.published_version || 1,
-            updated_at: updatedForm.updated_at,
-          });
+          .upsert(formPayload);
 
         if (formError) {
           console.warn('Supabase form upsert error, attempting retry with stringified theme_config:', formError.message || formError);
           // Retry with stringified theme_config in case the database column is TEXT
           await supabase.from('forms').upsert({
-            id: updatedForm.id,
-            owner_id: updatedForm.owner_id || 'admin',
-            title: updatedForm.title,
-            slug: updatedForm.slug,
-            description: updatedForm.description || '',
-            cover_image_url: updatedForm.cover_image_url,
-            event_date: updatedForm.event_date,
-            event_end_date: updatedForm.event_end_date,
-            venue: updatedForm.venue,
-            status: updatedForm.status,
-            registration_deadline: updatedForm.registration_deadline,
-            theme_config: JSON.stringify(updatedForm.theme_config),
-            success_message: updatedForm.success_message,
-            redirect_url: updatedForm.redirect_url,
-            published_version: updatedForm.published_version || 1,
-            updated_at: updatedForm.updated_at,
+            ...formPayload,
+            theme_config: JSON.stringify(formPayload.theme_config),
           });
         }
 
@@ -764,15 +760,15 @@ export class StorageService {
                 field_key: f.field_key,
                 label: f.label,
                 field_type: f.field_type,
-                description: f.description,
-                placeholder: f.placeholder,
-                required: f.required,
-                default_value: f.default_value,
-                options: f.options,
-                validation_rules: f.validation_rules,
-                conditional_rules: f.conditional_rules,
+                description: f.description?.trim() || null,
+                placeholder: f.placeholder?.trim() || null,
+                required: Boolean(f.required),
+                default_value: f.default_value ?? null,
+                options: f.options && Array.isArray(f.options) ? f.options : null,
+                validation_rules: f.validation_rules || null,
+                conditional_rules: f.conditional_rules || null,
                 sort_order: idx + 1,
-                configuration: f.configuration,
+                configuration: f.configuration || null,
               }))
             );
           }
