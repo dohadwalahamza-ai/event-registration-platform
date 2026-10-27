@@ -233,11 +233,11 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
             {tinyUrl && (
               <div className="pt-1.5 border-t border-indigo-100/80 flex items-center justify-between text-[11px] text-slate-600">
                 <span className="truncate text-slate-500">
-                  Direct: <code className="font-mono text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">{domainShortUrl}</code>
+                  Direct: <code className="font-mono text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200 truncate inline-block max-w-[200px] align-bottom">{selfContainedUrl}</code>
                 </span>
                 <button
                   type="button"
-                  onClick={() => handleCopyLink(domainShortUrl)}
+                  onClick={() => handleCopyLink(selfContainedUrl)}
                   className="font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer shrink-0 ml-2"
                 >
                   Copy Direct

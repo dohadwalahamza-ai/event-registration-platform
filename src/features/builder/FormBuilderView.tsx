@@ -34,7 +34,7 @@ interface FormBuilderViewProps {
   onBack: () => void;
   onSaveForm: (form: Form) => Promise<void>;
   onViewResponses: (formId: string) => void;
-  onOpenLivePublicPage: (slug: string) => void;
+  onOpenLivePublicPage: (slug: string, form?: Form) => void;
 }
 
 export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
@@ -540,7 +540,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             setIsDraftSaved(true);
             setHasUnsavedChanges(false);
           }
-          onOpenLivePublicPage(form.slug);
+          onOpenLivePublicPage(form.slug, form);
         }}
       />
     </div>

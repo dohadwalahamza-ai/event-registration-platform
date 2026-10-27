@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Submission, DashboardStats } from './types';
-import { StorageService, isSubmissionForForm } from './services/storage';
+import { StorageService, isSubmissionForForm, packFormToUrlPayload } from './services/storage';
 import { getSupabaseClient } from './services/supabaseClient';
 import { Layout } from './generic-ui/Layout';
 import { NavigationTab } from './generic-ui/Sidebar';
@@ -12,7 +12,7 @@ import { FormsListView } from './features/forms/FormsListView';
 import { FormBuilderView } from './features/builder/FormBuilderView';
 import { ResponseManagementView } from './features/responses/ResponseManagementView';
 import { PublicRegistrationPage } from './features/public-registration/PublicRegistrationPage';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 
 function extractSlugFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
@@ -143,9 +143,10 @@ function AppContent() {
       setSubmissions(allSubmissions);
       setStats(dashboardStats);
 
-      // Check Supabase connection
+      // Check Supabase connection and trigger background sync of local forms
       const client = getSupabaseClient();
       setIsSupabaseConnected(Boolean(client));
+      StorageService.syncLocalFormsToRemote().catch(() => {});
 
       // Set active form default if none selected
       if (!activeFormId && allForms.length > 0) {
@@ -441,9 +442,18 @@ function AppContent() {
     setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
   };
 
-  // Open public page
-  const handleOpenPublicUrl = (slug: string) => {
-    window.location.hash = `/e/${slug}`;
+  // Open public page with self-contained payload if available
+  const handleOpenPublicUrl = (slug: string, formToOpen?: Form) => {
+    const targetForm =
+      formToOpen ||
+      forms.find((f) => f.slug === slug || f.id === slug) ||
+      (activeForm && (activeForm.slug === slug || activeForm.id === slug) ? activeForm : undefined);
+    if (targetForm) {
+      const payload = packFormToUrlPayload(targetForm);
+      window.location.hash = payload ? `/e/${slug}?d=${payload}` : `/e/${slug}`;
+    } else {
+      window.location.hash = `/e/${slug}`;
+    }
   };
 
   // Handle logout
@@ -471,11 +481,28 @@ function AppContent() {
       return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 text-center">
           <div className="max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-md space-y-4">
-            <h2 className="text-xl font-bold text-slate-800">Event Form Not Found</h2>
-            <p className="text-xs text-slate-500">
-              The event URL <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">/e/{publicSlug}</code> does not exist or may have been unpublished.
+            <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-indigo-100">
+              <Sparkles className="w-7 h-7 text-indigo-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800">Form Not Synced to Mobile Yet</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              The event form <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-indigo-700 font-semibold">/e/{publicSlug}</code> was created on your organizer computer and is saved in that browser's local memory.
             </p>
-            <div className="flex items-center justify-center gap-2 pt-2">
+            <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100 text-left text-xs text-indigo-950 space-y-2">
+              <p className="font-semibold text-indigo-900 flex items-center gap-1.5">
+                <span>📱</span> To open your custom form on mobile:
+              </p>
+              <p className="text-[11px] text-slate-600 leading-normal">
+                On your computer, open this form in the Form Builder and click <strong>Share</strong>. Scan the <strong>QR code</strong> or copy the <strong>Share Link</strong> — it embeds all your custom questions so it loads instantly on any mobile device.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs cursor-pointer"
+              >
+                Retry Loading
+              </button>
               <button
                 onClick={() => {
                   window.location.hash = '';
@@ -483,7 +510,7 @@ function AppContent() {
                 }}
                 className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
               >
-                Return to Platform Home
+                Return Home
               </button>
             </div>
           </div>

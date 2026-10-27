@@ -38,7 +38,7 @@ interface FormsListViewProps {
   onDeleteForm: (formId: string) => Promise<void>;
   onDeleteForms?: (formIds: string[]) => Promise<void>;
   onTogglePublish: (form: Form) => Promise<void>;
-  onOpenPublicUrl: (slug: string) => void;
+  onOpenPublicUrl: (slug: string, form?: Form) => void;
 }
 
 export const FormsListView: React.FC<FormsListViewProps> = ({
@@ -427,7 +427,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => onOpenPublicUrl(form.slug)}
+                        onClick={() => onOpenPublicUrl(form.slug, form)}
                         className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                         title="Open Public Link"
                       >
@@ -574,7 +574,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
             await onTogglePublish(sharingForm);
             setSharingForm({ ...sharingForm, status: newStatus });
           }}
-          onOpenLivePreview={() => onOpenPublicUrl(sharingForm.slug)}
+          onOpenLivePreview={() => onOpenPublicUrl(sharingForm.slug, sharingForm)}
         />
       )}
     </div>

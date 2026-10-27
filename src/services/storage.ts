@@ -559,102 +559,76 @@ export class StorageService {
       if (seedFound) return seedFound;
     }
 
-    // 5. Intelligent dynamic auto-recovery for event slugs (e.g. event-form-mvqecm9w)
-    // Ensures mobile scanning or link clicking never hits a dead-end error
-    if (
-      !deletedIds.has(cleanSlug) &&
-      !deletedIds.has(coreSlug) &&
-      !deletedIds.has(`form-${coreSlug}`) &&
-      (cleanSlug.startsWith('event-form-') || cleanSlug.startsWith('form-') || coreSlug.length >= 3)
-    ) {
-      const fallbackForm: Form = {
-        id: `form-${coreSlug}`,
-        owner_id: 'organizer',
-        title: 'Event Registration Form',
-        slug: cleanSlug,
-        description: 'Welcome! Please fill in your registration details below to participate.',
-        cover_image_url:
-          'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80',
-        event_date: '2026-11-20T10:00',
-        venue: 'Grand Convention Hall & Sports Arena',
-        registration_deadline: '2026-11-18T23:59',
-        status: 'published',
-        response_limit: 'multiple',
-        theme_config: {
-          accentColor: '#4f46e5',
-          headerStyle: 'banner',
-          themeMode: 'light',
-          backgroundStyle: 'banner_glass',
-          borderRadius: 'xl',
-          customBackgroundColor: '#0f172a',
-        },
-        success_message: 'Thank you for registering! We have recorded your submission.',
-        published_version: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        fields: [
-          {
-            id: `f-${coreSlug}-1`,
-            form_id: `form-${coreSlug}`,
-            field_key: 'full_name',
-            label: 'Full Name',
-            field_type: 'short_text',
-            placeholder: 'Enter your full name',
-            required: true,
-            sort_order: 1,
-          },
-          {
-            id: `f-${coreSlug}-2`,
-            form_id: `form-${coreSlug}`,
-            field_key: 'phone_number',
-            label: 'Phone / WhatsApp Number',
-            field_type: 'phone',
-            placeholder: '+91 98765 43210',
-            required: true,
-            sort_order: 2,
-          },
-          {
-            id: `f-${coreSlug}-3`,
-            form_id: `form-${coreSlug}`,
-            field_key: 'email',
-            label: 'Email Address',
-            field_type: 'email',
-            placeholder: 'name@example.com',
-            required: false,
-            sort_order: 3,
-          },
-          {
-            id: `f-${coreSlug}-4`,
-            form_id: `form-${coreSlug}`,
-            field_key: 'participant_category',
-            label: 'Participation Category',
-            field_type: 'dropdown',
-            required: false,
-            sort_order: 4,
-            options: [
-              { id: 'opt-1', label: 'General Participant', value: 'general' },
-              { id: 'opt-2', label: 'VIP / Delegate', value: 'vip' },
-              { id: 'opt-3', label: 'Student / Youth', value: 'student' },
-            ],
-          },
-          {
-            id: `f-${coreSlug}-5`,
-            form_id: `form-${coreSlug}`,
-            field_key: 'notes',
-            label: 'Comments / Special Requests',
-            field_type: 'long_text',
-            placeholder: 'Any special requirements or dietary notes',
-            required: false,
-            sort_order: 5,
-          },
-        ],
-      };
-
-      this.updateLocalFormCache(fallbackForm);
-      return fallbackForm;
-    }
-
     return null;
+  }
+
+  /**
+   * Automatically synchronize all locally cached forms to remote Supabase database
+   */
+  static async syncLocalFormsToRemote(): Promise<void> {
+    const supabase = getSupabaseClient();
+    if (!supabase || typeof window === 'undefined') return;
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
+      if (!raw) return;
+      const forms: Form[] = JSON.parse(raw);
+      if (!Array.isArray(forms) || forms.length === 0) return;
+
+      const deletedIds = getDeletedFormIds();
+
+      for (const form of forms) {
+        if (deletedIds.has(form.id)) continue;
+        if (form.id === 'form-kpcl-season-5' || form.id === 'form-robotics-ai-hackathon') continue;
+
+        try {
+          const { error: formError } = await supabase.from('forms').upsert({
+            id: form.id,
+            owner_id: form.owner_id || 'admin',
+            title: form.title,
+            slug: form.slug,
+            description: form.description || '',
+            cover_image_url: form.cover_image_url,
+            event_date: form.event_date,
+            event_end_date: form.event_end_date,
+            venue: form.venue,
+            status: form.status,
+            registration_deadline: form.registration_deadline,
+            theme_config: form.theme_config,
+            success_message: form.success_message,
+            redirect_url: form.redirect_url,
+            published_version: form.published_version || 1,
+            updated_at: form.updated_at,
+          });
+
+          if (!formError && form.fields && form.fields.length > 0) {
+            await supabase.from('form_fields').delete().eq('form_id', form.id);
+            await supabase.from('form_fields').insert(
+              form.fields.map((f, idx) => ({
+                id: f.id,
+                form_id: form.id,
+                field_key: f.field_key,
+                label: f.label,
+                field_type: f.field_type,
+                description: f.description,
+                placeholder: f.placeholder,
+                required: f.required,
+                default_value: f.default_value,
+                options: f.options,
+                validation_rules: f.validation_rules,
+                conditional_rules: f.conditional_rules,
+                sort_order: idx + 1,
+                configuration: f.configuration,
+              }))
+            );
+          }
+        } catch {
+          // ignore RLS restriction
+        }
+      }
+    } catch (err) {
+      console.warn('Sync local forms error:', err);
+    }
   }
 
   /**

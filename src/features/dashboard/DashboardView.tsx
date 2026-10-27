@@ -24,7 +24,7 @@ interface DashboardViewProps {
   onCreateNewForm: () => void;
   onEditForm: (formId: string) => void;
   onViewResponses: (formId: string) => void;
-  onOpenPublicLink: (slug: string) => void;
+  onOpenPublicLink: (slug: string, form?: Form) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -188,7 +188,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => onOpenPublicLink(form.slug)}
+                    onClick={() => onOpenPublicLink(form.slug, form)}
                     leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
                     title="Open live public URL"
                   >
