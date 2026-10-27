@@ -834,6 +834,7 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
             selectedSubmission.submitted_at
           ).toLocaleString()} • Ref ID: ${selectedSubmission.id}`}
           maxWidth="2xl"
+          height="tall"
           footer={
             <div className="flex flex-wrap items-center justify-between w-full gap-2">
               <Button

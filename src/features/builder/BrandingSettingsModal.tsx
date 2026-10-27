@@ -207,6 +207,7 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       title="Event Details & Branding"
       description="Configure banner cover, event schedule, accent colors, and custom completion messages."
       maxWidth="2xl"
+      height="tall"
       footer={
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={onClose}>
