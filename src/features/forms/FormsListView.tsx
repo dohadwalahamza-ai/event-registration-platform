@@ -292,7 +292,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
           {filteredForms.map((form) => {
             const count = responseCounts[form.id] || 0;
             const isSelected = selectedFormIds.includes(form.id);
