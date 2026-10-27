@@ -18,8 +18,7 @@ import {
   ExternalLink,
   RotateCcw,
   Sparkles,
-  Copy,
-  Check,
+  UserCheck,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import confetti from 'canvas-confetti';
@@ -41,7 +40,14 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
-  const [copiedReference, setCopiedReference] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState<boolean>(() => {
+    if (isPreview || form.response_limit !== 'single') return false;
+    try {
+      return Boolean(localStorage.getItem(`submitted_form_${form.id}`));
+    } catch {
+      return false;
+    }
+  });
 
   const fields = form.fields || [];
   const theme: FormThemeConfig = parseThemeConfig(form.theme_config);
@@ -297,17 +303,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     }
   };
 
-  const handleCopyReference = () => {
-    if (!submissionId) return;
-    try {
-      navigator.clipboard.writeText(submissionId);
-      setCopiedReference(true);
-      setTimeout(() => setCopiedReference(false), 2500);
-    } catch (e) {
-      console.warn('Clipboard write failed:', e);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isClosed) return;
@@ -376,6 +371,14 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         subId = `PREV-${Date.now().toString(36).toUpperCase()}`;
       }
 
+      if (form.response_limit === 'single' && !isPreview) {
+        try {
+          localStorage.setItem(`submitted_form_${form.id}`, 'true');
+        } catch (e) {
+          console.warn('LocalStorage single response write error:', e);
+        }
+      }
+
       setSubmissionId(subId);
       setIsSuccess(true);
 
@@ -405,6 +408,11 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
       console.error('Submission unexpected error:', err);
       // Even if something unexpected happens, guarantee success display so participant isn't stranded
       const fallbackId = `REG-${Date.now().toString(36).toUpperCase()}`;
+      if (form.response_limit === 'single' && !isPreview) {
+        try {
+          localStorage.setItem(`submitted_form_${form.id}`, 'true');
+        } catch {}
+      }
       setSubmissionId(fallbackId);
       setIsSuccess(true);
       if (typeof window !== 'undefined') {
@@ -421,7 +429,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     setSubmissionError(null);
     setIsSuccess(false);
     setSubmissionId(null);
-    setCopiedReference(false);
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -484,37 +491,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
             </p>
           </div>
 
-          {/* Reference ID & Copy Option */}
-          {submissionId && (
-            <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center justify-between gap-3 text-left">
-              <div className="min-w-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-60 block">
-                  Confirmation Reference ID
-                </span>
-                <span className="text-sm font-mono font-bold truncate block">
-                  {submissionId}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleCopyReference}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 shadow-xs shrink-0 cursor-pointer transition-all active:scale-95"
-              >
-                {copiedReference ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="text-emerald-700">Copied</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Copy ID</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
           {/* Quick Event Summary Reminder */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left text-xs">
             <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center gap-2.5">
@@ -556,15 +532,22 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Button
-              variant="outline"
-              size="md"
-              onClick={handleReset}
-              leftIcon={<RotateCcw className="w-4 h-4" />}
-              className="w-full sm:w-auto"
-            >
-              Submit Another Response
-            </Button>
+            {form.response_limit !== 'single' ? (
+              <Button
+                variant="outline"
+                size="md"
+                onClick={handleReset}
+                leftIcon={<RotateCcw className="w-4 h-4" />}
+                className="w-full sm:w-auto"
+              >
+                Submit Another Response
+              </Button>
+            ) : (
+              <div className="px-4 py-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-800 dark:text-emerald-200 flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Single response recorded. Thank you for registering!</span>
+              </div>
+            )}
 
             {isPreview && onClosePreview && (
               <Button
@@ -577,6 +560,54 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                 Return to Builder
               </Button>
             )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ALREADY SUBMITTED STATE (Single Response Limit Mode)
+  if (alreadySubmitted && !isSuccess) {
+    return (
+      <div
+        className={`min-h-screen py-16 px-4 flex items-center justify-center font-sans ${atmosphere.wrapperClass}`}
+        style={atmosphere.wrapperStyle}
+      >
+        <div className={`max-w-md w-full rounded-3xl p-8 text-center space-y-5 animate-fade-in shadow-2xl ${atmosphere.cardClass}`}>
+          <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
+          </div>
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 text-xs font-bold uppercase tracking-wider mb-2">
+              <UserCheck className="w-3.5 h-3.5" />
+              Already Registered
+            </div>
+            <h2 className={`text-2xl font-black ${atmosphere.headingClass}`}>{form.title}</h2>
+            <p className={`text-xs mt-2 leading-relaxed ${atmosphere.descClass}`}>
+              You have already submitted this registration form. This event is configured for a single response per participant.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-950 font-medium text-left">
+            <p className="font-bold text-emerald-900 mb-1">Your response is safely recorded.</p>
+            <p className="text-emerald-800">
+              {form.success_message || 'Thank you for registering! Event organizers have received your information.'}
+            </p>
+          </div>
+
+          <div className="pt-2 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  localStorage.removeItem(`submitted_form_${form.id}`);
+                  setAlreadySubmitted(false);
+                } catch {}
+              }}
+              className="text-[11px] text-slate-400 hover:text-indigo-600 underline cursor-pointer transition-colors"
+            >
+              (Need to re-submit? Click here to clear previous response)
+            </button>
           </div>
         </div>
       </div>

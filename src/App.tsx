@@ -286,6 +286,7 @@ function AppContent() {
       },
       success_message: 'Thank you for registering! We have recorded your submission.',
       published_version: 1,
+      response_limit: 'multiple',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       fields: [

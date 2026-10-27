@@ -12,6 +12,8 @@ import {
   Clock,
   Sparkles,
   Check,
+  Users,
+  UserCheck,
 } from 'lucide-react';
 
 import { parseThemeConfig } from '../../services/storage';
@@ -38,6 +40,9 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   const [deadline, setDeadline] = useState(form.registration_deadline || '');
   const [successMessage, setSuccessMessage] = useState(form.success_message);
   const [redirectUrl, setRedirectUrl] = useState(form.redirect_url || '');
+  const [responseLimit, setResponseLimit] = useState<'single' | 'multiple'>(
+    form.response_limit || 'multiple'
+  );
   const [themeConfig, setThemeConfig] = useState<FormThemeConfig>(
     parseThemeConfig(form.theme_config)
   );
@@ -56,6 +61,7 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       setDeadline(form.registration_deadline || '');
       setSuccessMessage(form.success_message);
       setRedirectUrl(form.redirect_url || '');
+      setResponseLimit(form.response_limit || 'multiple');
       const parsedTheme = parseThemeConfig(form.theme_config);
       setThemeConfig(parsedTheme);
       setCustomBackgroundColor(parsedTheme.customBackgroundColor || '#0f172a');
@@ -192,6 +198,7 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       registration_deadline: deadline,
       success_message: successMessage,
       redirect_url: redirectUrl,
+      response_limit: responseLimit,
       theme_config: {
         ...themeConfig,
         customBackgroundColor,
@@ -528,6 +535,83 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Response Submission Policy: Multiple Responses vs Single Response */}
+        <div className="pt-3 border-t border-slate-100">
+          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide mb-1">
+            Response Submission Policy
+          </label>
+          <p className="text-[11px] text-slate-500 mb-2.5">
+            Choose whether participants can register multiple times or only once per person.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setResponseLimit('multiple')}
+              className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                responseLimit === 'multiple'
+                  ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20 shadow-xs'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`p-1.5 rounded-lg ${
+                      responseLimit === 'multiple'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-900">Multiple Responses</span>
+                </div>
+                {responseLimit === 'multiple' && (
+                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Respondents can submit more than once. Perfect for team rosters, group enrollments, or open recurring signups.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setResponseLimit('single')}
+              className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                responseLimit === 'single'
+                  ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20 shadow-xs'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`p-1.5 rounded-lg ${
+                      responseLimit === 'single'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-900">Single Response Only</span>
+                </div>
+                {responseLimit === 'single' && (
+                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Limits to 1 submission per participant. Prevents duplicates and disables re-submission on the completion page.
+              </p>
+            </button>
+          </div>
         </div>
 
         {/* Success Message & Redirect */}

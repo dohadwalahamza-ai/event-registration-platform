@@ -20,6 +20,8 @@ import {
   AlertCircle,
   FileText,
   AlertTriangle,
+  Users,
+  UserCheck,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
@@ -264,6 +266,44 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
               Responses
             </Button>
           )}
+
+          {/* Quick Response Policy Toggle (Multiple vs Single) */}
+          <div className="hidden lg:flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setForm((prev) => ({ ...prev, response_limit: 'multiple' }));
+                setHasUnsavedChanges(true);
+                success('Response Policy', 'Multiple responses allowed per participant.');
+              }}
+              className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                (form.response_limit || 'multiple') === 'multiple'
+                  ? 'bg-white text-indigo-700 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Participants can register more than once"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Multiple Responses</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setForm((prev) => ({ ...prev, response_limit: 'single' }));
+                setHasUnsavedChanges(true);
+                success('Response Policy', 'Limited to a single response per participant.');
+              }}
+              className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                form.response_limit === 'single'
+                  ? 'bg-white text-indigo-700 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Limit to 1 response per participant"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Single Response</span>
+            </button>
+          </div>
 
           {/* Event Branding & Theme */}
           <Button

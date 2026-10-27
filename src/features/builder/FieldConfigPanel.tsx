@@ -245,8 +245,44 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
 
         {/* TAB 2: OPTIONS */}
         {activeTab === 'options' && isChoiceField && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="space-y-4">
+            {/* Single vs Multiple choice answer mode */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <label className="block font-bold text-slate-800 text-[11px] uppercase tracking-wider">
+                Answer Selection Mode
+              </label>
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/70 rounded-lg text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => handleUpdate({ field_type: 'radio' })}
+                  className={`py-1.5 px-2 rounded-md transition-all text-center cursor-pointer ${
+                    field.field_type === 'radio' || field.field_type === 'dropdown'
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Single Choice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUpdate({ field_type: 'checkbox' })}
+                  className={`py-1.5 px-2 rounded-md transition-all text-center cursor-pointer ${
+                    field.field_type === 'checkbox'
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Multiple Choices
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500">
+                {field.field_type === 'checkbox'
+                  ? 'Respondents can select multiple answers (Checkboxes).'
+                  : 'Respondents can select only one answer (Radio buttons).'}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
               <span className="font-semibold text-slate-700">Choice Options</span>
               <button
                 onClick={handleAddOption}

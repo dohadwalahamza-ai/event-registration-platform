@@ -340,7 +340,10 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent" />
 
-                  <div className="absolute top-3 right-3">
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-md text-white border border-white/20">
+                      {form.response_limit === 'single' ? 'Single Resp' : 'Multiple Resp'}
+                    </span>
                     <Badge
                       variant={
                         form.status === 'published'
