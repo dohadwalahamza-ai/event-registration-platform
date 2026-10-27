@@ -110,7 +110,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
       onClose={onClose}
       title="Share Shortened Event Link"
       description="Easily share your registration link on WhatsApp, SMS, posters, or social media."
-      maxWidth="lg"
+      maxWidth="xl"
     >
       <div className="space-y-5 text-sm">
         {/* Status card */}
