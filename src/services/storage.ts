@@ -43,12 +43,27 @@ function addDeletedSubmissionId(id: string) {
   localStorage.setItem(STORAGE_KEYS.DELETED_SUBMISSION_IDS, JSON.stringify(Array.from(set)));
 }
 
-// Initialize local storage with sample forms if empty
+// Initialize local storage - keep forms clean so mobile browsers don't load stale samples
 function initializeStorage() {
   if (typeof window === 'undefined') return;
   const existingForms = localStorage.getItem(STORAGE_KEYS.FORMS);
   if (!existingForms) {
-    localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(SAMPLE_FORMS));
+    localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify([]));
+  } else {
+    // Purge default sample seed forms and dummy fallback forms from localStorage
+    try {
+      const parsed: Form[] = JSON.parse(existingForms);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter(
+          (f) =>
+            !f.id.startsWith('form-fallback-') &&
+            f.title !== 'Event Registration Form'
+        );
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(cleaned));
+        }
+      }
+    } catch {}
   }
 
   const existingSubs = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
@@ -165,27 +180,112 @@ export class StorageService {
             }
           }
 
-          const unique = Array.from(new Set(Array.from(map.values())));
-          return unique.filter((f) => !deletedIds.has(f.id));
+          const unique = Array.from(new Set(Array.from(map.values()))).filter((f) => !deletedIds.has(f.id));
+          try {
+            localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(unique));
+          } catch {}
+          return unique;
         }
       } catch (err) {
         console.warn('Supabase fetch failed, falling back to local storage', err);
       }
     }
 
-    const result = localForms.length > 0 ? localForms : SAMPLE_FORMS;
-    return result.filter((f) => !deletedIds.has(f.id));
+    return localForms.filter((f) => !deletedIds.has(f.id));
   }
 
   /**
-   * Fetch a single form by unique slug or ID (supports shortened URLs like /e/mvph0jx2)
+   * Update the local cache for a specific form (keeping it fresh without polluting with stale samples)
+   */
+  static updateLocalFormCache(freshForm: Form): void {
+    if (typeof window === 'undefined' || !freshForm) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
+      const currentForms: Form[] = raw ? JSON.parse(raw) : [];
+      const cleanSlug = freshForm.slug.toLowerCase();
+      const existingIdx = currentForms.findIndex(
+        (f) =>
+          f.id === freshForm.id ||
+          f.slug.toLowerCase() === cleanSlug
+      );
+      if (existingIdx >= 0) {
+        currentForms[existingIdx] = freshForm;
+      } else {
+        currentForms.unshift(freshForm);
+      }
+      localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(currentForms));
+    } catch (e) {
+      console.warn('Failed to update local form cache:', e);
+    }
+  }
+
+  /**
+   * Purge stale cached forms and temporary draft data to guarantee fresh view
+   */
+  static clearStaleFormCache(keepSlug?: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
+      if (raw) {
+        const parsed: Form[] = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          // Remove dummy fallback forms and default seed samples unless currently requested
+          const cleaned = parsed.filter((f) => {
+            if (f.id.startsWith('form-fallback-') || f.title === 'Event Registration Form') return false;
+            if (keepSlug && (f.slug.toLowerCase() === keepSlug.toLowerCase() || f.id.toLowerCase() === keepSlug.toLowerCase())) return true;
+            if (f.id === 'form-kpcl-season-5' || f.id === 'form-robotics-ai-hackathon') return false;
+            return true;
+          });
+          localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(cleaned));
+        }
+      }
+      if (window.sessionStorage) {
+        window.sessionStorage.clear();
+      }
+    } catch (e) {
+      console.warn('Failed to clear stale form cache:', e);
+    }
+  }
+
+  /**
+   * Fetch a single form by unique slug or ID (prioritizes remote server to prevent stale mobile cache)
    */
   static async getFormBySlug(slug: string): Promise<Form | null> {
     const deletedIds = getDeletedFormIds();
     const cleanSlug = decodeURIComponent(slug.trim()).toLowerCase().replace(/\/+$/, '');
     const coreSlug = cleanSlug.replace(/^(event-form-|form-)/, '');
 
-    // 1. FIRST check local forms directly (preserves latest builder edits & custom themes)
+    // 1. ALWAYS query Supabase remote database FIRST if connected
+    // This guarantees that mobile browsers and external respondents get the fresh live version
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('forms')
+          .select('*, fields:form_fields(*)')
+          .or(
+            `slug.ilike.${cleanSlug},id.eq.${cleanSlug},slug.ilike.event-form-${coreSlug},slug.ilike.form-${coreSlug},id.eq.form-${coreSlug},slug.ilike.${coreSlug}`
+          )
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && data && !deletedIds.has(data.id)) {
+          const supaForm: Form = {
+            ...data,
+            theme_config: parseThemeConfig(data.theme_config),
+            fields: (data.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
+          };
+
+          // Synchronize fresh remote version into local storage
+          this.updateLocalFormCache(supaForm);
+          return supaForm;
+        }
+      } catch (err) {
+        console.warn('Supabase fetch by slug failed, checking local storage', err);
+      }
+    }
+
+    // 2. Query locally cached forms if Supabase is offline or not configured
     let localForms: Form[] = [];
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
@@ -208,137 +308,20 @@ export class StorageService {
           f.slug.toLowerCase() === `event-form-${coreSlug}` ||
           f.slug.toLowerCase() === `form-${coreSlug}` ||
           f.id.toLowerCase() === `form-${coreSlug}` ||
-          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
-          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
+          (coreSlug.length >= 4 && f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug) ||
+          (coreSlug.length >= 4 && f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug))
     );
-
-    // 2. Query Supabase remote database
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('forms')
-          .select('*, fields:form_fields(*)')
-          .or(
-            `slug.ilike.${cleanSlug},id.eq.${cleanSlug},slug.ilike.event-form-${coreSlug},slug.ilike.form-${coreSlug},id.eq.form-${coreSlug},slug.ilike.${coreSlug}`
-          )
-          .limit(1)
-          .maybeSingle();
-
-        if (!error && data && !deletedIds.has(data.id)) {
-          const supaForm: Form = {
-            ...data,
-            theme_config: parseThemeConfig(data.theme_config),
-            fields: (data.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
-          };
-
-          if (localFound) {
-            const localTime = new Date(localFound.updated_at || 0).getTime();
-            const supaTime = new Date(supaForm.updated_at || 0).getTime();
-            if (localTime >= supaTime) {
-              return localFound;
-            }
-          }
-          return supaForm;
-        }
-      } catch (err) {
-        console.warn('Supabase fetch by slug failed, checking local storage', err);
-      }
-    }
 
     if (localFound) return localFound;
 
-    // 3. Check merged all forms list
-    const allForms = await this.getForms();
-    const found = allForms.find(
-      (f) =>
-        !deletedIds.has(f.id) &&
-        (f.slug.toLowerCase() === cleanSlug ||
-          f.id.toLowerCase() === cleanSlug ||
-          f.slug.toLowerCase() === `event-form-${coreSlug}` ||
-          f.slug.toLowerCase() === `form-${coreSlug}` ||
-          f.id.toLowerCase() === `form-${coreSlug}` ||
-          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
-          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
-    );
-    if (found) return found;
-
-    // 4. Check pre-seeded sample forms directly
-    const seedFound = SAMPLE_FORMS.find(
-      (f) =>
-        !deletedIds.has(f.id) &&
-        (f.slug.toLowerCase() === cleanSlug ||
-          f.id.toLowerCase() === cleanSlug ||
-          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
-    );
-    if (seedFound) return seedFound;
-
-    // 5. Dynamic fallback for any created event form slug or short ID
-    if (
-      (cleanSlug.startsWith('event-form-') || cleanSlug.startsWith('form-') || coreSlug.length >= 4) &&
-      !deletedIds.has(`form-${cleanSlug}`) &&
-      !deletedIds.has(cleanSlug) &&
-      !deletedIds.has(`form-${coreSlug}`)
-    ) {
-      const fallbackForm: Form = {
-        id: `form-${cleanSlug}`,
-        owner_id: 'admin',
-        title: 'Event Registration Form',
-        slug: cleanSlug,
-        description: 'Welcome to our event registration portal. Please fill out your details below to register.',
-        cover_image_url:
-          'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80',
-        event_date: '2026-11-20T10:00',
-        venue: 'Grand Convention Center, Main Exhibition Hall',
-        registration_deadline: '2026-11-18T23:59',
-        status: 'published',
-        theme_config: {
-          accentColor: '#d97706',
-          headerStyle: 'banner',
-          themeMode: 'light',
-          backgroundStyle: 'vibrant_gradient',
-          borderRadius: 'xl',
-        },
-        success_message: 'Thank you! Your registration has been submitted successfully.',
-        published_version: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        fields: [
-          {
-            id: `f-${cleanSlug}-1`,
-            form_id: `form-${cleanSlug}`,
-            field_key: 'full_name',
-            label: 'Full Name',
-            field_type: 'short_text',
-            placeholder: 'Enter your full name',
-            required: true,
-            sort_order: 1,
-          },
-          {
-            id: `f-${cleanSlug}-2`,
-            form_id: `form-${cleanSlug}`,
-            field_key: 'email',
-            label: 'Email Address',
-            field_type: 'email',
-            placeholder: 'name@example.com',
-            required: true,
-            sort_order: 2,
-          },
-          {
-            id: `f-${cleanSlug}-3`,
-            form_id: `form-${cleanSlug}`,
-            field_key: 'phone_number',
-            label: 'Phone / WhatsApp Number',
-            field_type: 'phone',
-            placeholder: '+91 98765 43210',
-            required: true,
-            sort_order: 3,
-          },
-        ],
-      };
-      // Save locally so future queries find it
-      await this.saveForm(fallbackForm);
-      return fallbackForm;
+    // 3. Only return sample form if user specifically asked for that sample form slug
+    if (cleanSlug === 'kpcl-season-5' || cleanSlug === 'robotics-ai-hackathon-2026') {
+      const seedFound = SAMPLE_FORMS.find(
+        (f) =>
+          !deletedIds.has(f.id) &&
+          (f.slug.toLowerCase() === cleanSlug || f.id.toLowerCase() === cleanSlug)
+      );
+      if (seedFound) return seedFound;
     }
 
     return null;

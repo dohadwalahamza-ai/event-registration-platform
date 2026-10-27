@@ -50,6 +50,19 @@ function AppContent() {
       const raw = path.replace('/e/', '').split('?')[0];
       slug = decodeURIComponent(raw).replace(/\/+$/, '');
     }
+
+    // Auto-detect fresh requests or clear cache parameter
+    const fullHref = window.location.href;
+    if (fullHref.includes('clear_cache') || fullHref.includes('fresh')) {
+      StorageService.clearStaleFormCache(slug || undefined);
+    }
+
+    if (slug !== publicSlug) {
+      setPublicForm(null); // Clear previous form immediately so it never shows
+      if (slug) {
+        setIsPublicLoading(true);
+      }
+    }
     setPublicSlug(slug);
 
     if (hash === '#/login') {
@@ -195,6 +208,8 @@ function AppContent() {
 
     let isCancelled = false;
     setIsPublicLoading(true);
+    // Purge stale form cache so no previous forms linger on mobile
+    StorageService.clearStaleFormCache(publicSlug);
 
     StorageService.getFormBySlug(publicSlug)
       .then((form) => {
@@ -206,6 +221,7 @@ function AppContent() {
       .catch((err) => {
         console.error('Error fetching public form:', err);
         if (!isCancelled) {
+          setPublicForm(null);
           setIsPublicLoading(false);
         }
       });
@@ -424,30 +440,19 @@ function AppContent() {
 
   // 1. PUBLIC REGISTRATION ROUTE (Accessible without login)
   if (publicSlug) {
-    if (isPublicLoading) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
-          <div className="flex flex-col items-center gap-3 text-slate-600">
-            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-            <span className="text-xs font-semibold text-slate-500">Loading Event Registration Form...</span>
+    if (isPublicLoading || !publicForm) {
+      if (isPublicLoading) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-slate-50">
+            <div className="flex flex-col items-center gap-3 text-slate-600">
+              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+              <span className="text-xs font-semibold text-slate-500">Loading Event Registration Form...</span>
+            </div>
           </div>
-        </div>
-      );
-    }
+        );
+      }
 
-    // Use loaded publicForm, or fallback to in-memory forms list
-    const cleanPublic = publicSlug.toLowerCase().replace(/^(event-form-|form-)/, '');
-    const formToRender =
-      publicForm ||
-      forms.find(
-        (f) =>
-          f.slug.toLowerCase() === publicSlug.toLowerCase() ||
-          f.id.toLowerCase() === publicSlug.toLowerCase() ||
-          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === cleanPublic ||
-          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === cleanPublic
-      );
-
-    if (!formToRender) {
+      // If finished loading and no publicForm is found
       return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 text-center">
           <div className="max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-md space-y-4">
@@ -455,21 +460,33 @@ function AppContent() {
             <p className="text-xs text-slate-500">
               The event URL <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">/e/{publicSlug}</code> does not exist or may have been unpublished.
             </p>
-            <button
-              onClick={() => {
-                window.location.hash = '';
-                setPublicSlug(null);
-              }}
-              className="text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
-            >
-              Return to Platform Home
-            </button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+              <button
+                onClick={() => {
+                  StorageService.clearStaleFormCache();
+                  const cleanUrl = window.location.href.split('?')[0];
+                  window.location.replace(`${cleanUrl}?fresh=${Date.now()}`);
+                }}
+                className="px-4 py-2 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl cursor-pointer"
+              >
+                Clear Cache & Reload
+              </button>
+              <button
+                onClick={() => {
+                  window.location.hash = '';
+                  setPublicSlug(null);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
+              >
+                Return to Platform Home
+              </button>
+            </div>
           </div>
         </div>
       );
     }
 
-    return <PublicRegistrationPage form={formToRender} />;
+    return <PublicRegistrationPage form={publicForm} />;
   }
 
   // 2. LOADING STATE
