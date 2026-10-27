@@ -721,30 +721,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
       )}
 
       <div className="max-w-2xl mx-auto space-y-6 relative z-10">
-        {/* Fresh Cache Action Bar for Mobile / Web */}
-        <div className="flex items-center justify-between text-xs px-1">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-white/90 drop-shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Live Registration Portal
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              StorageService.clearStaleFormCache(form.slug);
-              try {
-                localStorage.removeItem(`submitted_form_${form.id}`);
-              } catch {}
-              const cleanUrl = window.location.href.split('?')[0];
-              window.location.replace(`${cleanUrl}?fresh=${Date.now()}`);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 hover:bg-black/60 text-white text-[11px] font-semibold border border-white/25 backdrop-blur-md shadow-xs transition-all cursor-pointer active:scale-95"
-            title="Clear all local cache and load the latest live form"
-          >
-            <RotateCcw className="w-3 h-3 text-white" />
-            <span>Clear Cache & Reload</span>
-          </button>
-        </div>
-
         {/* Event Header Banner Card */}
         <div className={`rounded-3xl border overflow-hidden shadow-xl transition-all duration-300 ${atmosphere.cardClass}`}>
           {/* Banner Cover Image */}

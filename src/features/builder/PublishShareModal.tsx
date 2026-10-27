@@ -41,14 +41,16 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
   const { success } = useToast();
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://event.khargharjamaat.org';
+  const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-  // Clean short code: strips 'event-form-' or 'form-' prefix
+  // Full clean slug prioritized for link sharing
   const shortCode = (form.slug || form.id).replace(/^(event-form-|form-)/, '');
-  const domainShortUrl = `${baseUrl}/#/e/${shortCode}`;
+  const activeSlug = form.slug || shortCode;
+  const domainShortUrl = `${baseUrl}/#/e/${activeSlug}`;
 
-  // Automatically fetch an ultra-short TinyURL link when opened
+  // Automatically fetch an ultra-short TinyURL link when opened (only on production/public domains)
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !isLocalhost && !baseUrl.includes('localhost')) {
       setIsLoadingTiny(true);
       fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(domainShortUrl)}`)
         .then((res) => res.text())
@@ -63,8 +65,10 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
         .finally(() => {
           setIsLoadingTiny(false);
         });
+    } else {
+      setTinyUrl('');
     }
-  }, [isOpen, domainShortUrl]);
+  }, [isOpen, domainShortUrl, isLocalhost, baseUrl]);
 
   // Primary short URL for 1-click sharing
   const activeShortUrl = tinyUrl || domainShortUrl;

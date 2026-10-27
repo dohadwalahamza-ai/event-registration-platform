@@ -260,20 +260,95 @@ export class StorageService {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        const { data, error } = await supabase
-          .from('forms')
-          .select('*, fields:form_fields(*)')
-          .or(
-            `slug.ilike.${cleanSlug},id.eq.${cleanSlug},slug.ilike.event-form-${coreSlug},slug.ilike.form-${coreSlug},id.eq.form-${coreSlug},slug.ilike.${coreSlug}`
-          )
-          .limit(1)
-          .maybeSingle();
+        const candidateSlugs = Array.from(
+          new Set([
+            cleanSlug,
+            coreSlug,
+            `event-form-${coreSlug}`,
+            `form-${coreSlug}`,
+          ])
+        );
+        const candidateIds = Array.from(
+          new Set([
+            cleanSlug,
+            `form-${cleanSlug}`,
+            `form-${coreSlug}`,
+            coreSlug,
+          ])
+        );
 
-        if (!error && data && !deletedIds.has(data.id)) {
+        let formData: any = null;
+
+        // Try candidate slugs
+        for (const s of candidateSlugs) {
+          const { data, error } = await supabase
+            .from('forms')
+            .select('*')
+            .ilike('slug', s)
+            .limit(1)
+            .maybeSingle();
+          if (!error && data) {
+            formData = data;
+            break;
+          }
+        }
+
+        // Try candidate IDs if slug didn't match
+        if (!formData) {
+          for (const id of candidateIds) {
+            const { data, error } = await supabase
+              .from('forms')
+              .select('*')
+              .eq('id', id)
+              .limit(1)
+              .maybeSingle();
+            if (!error && data) {
+              formData = data;
+              break;
+            }
+          }
+        }
+
+        // Broad fallback search in Supabase if specific candidate didn't match
+        if (!formData) {
+          const { data: allRows } = await supabase
+            .from('forms')
+            .select('*')
+            .limit(50);
+          if (allRows && Array.isArray(allRows)) {
+            formData = allRows.find((r: any) => {
+              if (deletedIds.has(r.id)) return false;
+              const fs = (r.slug || '').toLowerCase();
+              const fi = (r.id || '').toLowerCase();
+              return (
+                fs === cleanSlug ||
+                fi === cleanSlug ||
+                fs.replace(/^(event-form-|form-)/, '') === coreSlug ||
+                fi.replace(/^(event-form-|form-)/, '') === coreSlug ||
+                (coreSlug.length >= 4 && fs.includes(coreSlug)) ||
+                (coreSlug.length >= 4 && fi.includes(coreSlug))
+              );
+            });
+          }
+        }
+
+        if (formData && !deletedIds.has(formData.id)) {
+          // Fetch fields separately to avoid PostgREST relationship embedding issues
+          let fields: any[] = [];
+          const { data: fieldsData } = await supabase
+            .from('form_fields')
+            .select('*')
+            .eq('form_id', formData.id)
+            .order('sort_order', { ascending: true });
+
+          if (fieldsData && Array.isArray(fieldsData)) {
+            fields = fieldsData;
+          }
+
           const supaForm: Form = {
-            ...data,
-            theme_config: parseThemeConfig(data.theme_config),
-            fields: (data.fields || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
+            ...formData,
+            theme_config: parseThemeConfig(formData.theme_config),
+            fields: fields.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)),
           };
 
           // Synchronize fresh remote version into local storage
@@ -308,14 +383,30 @@ export class StorageService {
           f.slug.toLowerCase() === `event-form-${coreSlug}` ||
           f.slug.toLowerCase() === `form-${coreSlug}` ||
           f.id.toLowerCase() === `form-${coreSlug}` ||
-          (coreSlug.length >= 4 && f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug) ||
-          (coreSlug.length >= 4 && f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug))
+          (coreSlug.length >= 3 && f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug) ||
+          (coreSlug.length >= 3 && f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug) ||
+          (cleanSlug.length >= 4 && f.slug.toLowerCase().includes(cleanSlug)) ||
+          (cleanSlug.length >= 4 && cleanSlug.includes(f.slug.toLowerCase())))
     );
 
     if (localFound) return localFound;
 
-    // 3. Only return sample form if user specifically asked for that sample form slug
-    if (cleanSlug === 'kpcl-season-5' || cleanSlug === 'robotics-ai-hackathon-2026') {
+    // 3. Fallback: Query all merged forms
+    try {
+      const all = await this.getForms();
+      const match = all.find(
+        (f) =>
+          !deletedIds.has(f.id) &&
+          (f.slug.toLowerCase() === cleanSlug ||
+            f.id.toLowerCase() === cleanSlug ||
+            f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
+            f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
+      );
+      if (match) return match;
+    } catch {}
+
+    // 4. Sample forms fallback if requested
+    if (cleanSlug.includes('kpcl') || cleanSlug.includes('robotics')) {
       const seedFound = SAMPLE_FORMS.find(
         (f) =>
           !deletedIds.has(f.id) &&

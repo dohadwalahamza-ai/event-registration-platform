@@ -14,6 +14,26 @@ import { ResponseManagementView } from './features/responses/ResponseManagementV
 import { PublicRegistrationPage } from './features/public-registration/PublicRegistrationPage';
 import { Loader2 } from 'lucide-react';
 
+function extractSlugFromUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash || '';
+  const path = window.location.pathname || '';
+
+  // 1. Check hash variations: #/e/:slug, #e/:slug, #/form/:slug
+  const hashMatch = hash.match(/^#\/?(?:e|form)\/([^?&#]+)/i);
+  if (hashMatch && hashMatch[1]) {
+    return decodeURIComponent(hashMatch[1]).trim().replace(/\/+$/, '');
+  }
+
+  // 2. Check path variations: /e/:slug, /form/:slug
+  const pathMatch = path.match(/^\/?(?:e|form)\/([^?&#/]+)/i);
+  if (pathMatch && pathMatch[1]) {
+    return decodeURIComponent(pathMatch[1]).trim().replace(/\/+$/, '');
+  }
+
+  return null;
+}
+
 function AppContent() {
   const { user, isAuthenticated, isLoading: isAuthLoading, logout } = useAuth();
   const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
@@ -31,31 +51,20 @@ function AppContent() {
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
   const [newDraftForm, setNewDraftForm] = useState<Form | null>(null);
 
-  // Check URL hash for public page routes and admin deep linking
-  const [publicSlug, setPublicSlug] = useState<string | null>(null);
+  // Synchronously initialize public slug to prevent flashing admin loading or login page on mobile
+  const initialSlug = extractSlugFromUrl();
+  const [publicSlug, setPublicSlug] = useState<string | null>(initialSlug);
   const [publicForm, setPublicForm] = useState<Form | null>(null);
-  const [isPublicLoading, setIsPublicLoading] = useState(false);
+  const [isPublicLoading, setIsPublicLoading] = useState<boolean>(Boolean(initialSlug));
   const [isLoginRoute, setIsLoginRoute] = useState(false);
   const { success, error, info } = useToast();
 
   const parseRoute = () => {
-    const hash = window.location.hash;
-    const path = window.location.pathname;
+    const slug = extractSlugFromUrl();
+    const hash = window.location.hash || '';
 
-    let slug: string | null = null;
-    if (hash.startsWith('#/e/')) {
-      const raw = hash.replace('#/e/', '').split('?')[0];
-      slug = decodeURIComponent(raw).replace(/\/+$/, '');
-    } else if (path.startsWith('/e/')) {
-      const raw = path.replace('/e/', '').split('?')[0];
-      slug = decodeURIComponent(raw).replace(/\/+$/, '');
-    }
-
-    // Auto-detect fresh requests or clear cache parameter
-    const fullHref = window.location.href;
-    if (fullHref.includes('clear_cache') || fullHref.includes('fresh')) {
-      StorageService.clearStaleFormCache(slug || undefined);
-    }
+    // Auto-clear cache on load seamlessly in the background
+    StorageService.clearStaleFormCache(slug || undefined);
 
     if (slug !== publicSlug) {
       setPublicForm(null); // Clear previous form immediately so it never shows
@@ -118,6 +127,12 @@ function AppContent() {
   }, []);
 
   const loadData = async () => {
+    // If opening a public form route, don't run heavy admin dashboard loading
+    if (extractSlugFromUrl()) {
+      setIsDataLoading(false);
+      return;
+    }
+
     setIsDataLoading(true);
     try {
       const allForms = await StorageService.getForms();
@@ -460,17 +475,7 @@ function AppContent() {
             <p className="text-xs text-slate-500">
               The event URL <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">/e/{publicSlug}</code> does not exist or may have been unpublished.
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
-              <button
-                onClick={() => {
-                  StorageService.clearStaleFormCache();
-                  const cleanUrl = window.location.href.split('?')[0];
-                  window.location.replace(`${cleanUrl}?fresh=${Date.now()}`);
-                }}
-                className="px-4 py-2 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl cursor-pointer"
-              >
-                Clear Cache & Reload
-              </button>
+            <div className="flex items-center justify-center gap-2 pt-2">
               <button
                 onClick={() => {
                   window.location.hash = '';
