@@ -110,17 +110,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right section: actions, status, profile */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Quick Create Form Button */}
-        <Button
-          onClick={onCreateNewForm}
-          size="sm"
-          variant="primary"
-          leftIcon={<Plus className="w-4 h-4" />}
-          className="hidden sm:inline-flex"
-        >
-          Create Form
-        </Button>
-
         {/* Notification Bell with Responses Dropdown */}
         <div className="relative" ref={notifRef}>
           <button

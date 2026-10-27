@@ -169,7 +169,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
       await onSaveForm(draftForm);
       setHasUnsavedChanges(false);
       setIsDraftSaved(true);
-      success('Saved as Draft', `"${draftForm.title}" is saved as a draft and added to All Forms.`);
+      success('Stored in Draft', `"${draftForm.title}" is stored in Draft and added to All Forms.`);
     } catch {
       error('Save Failed', 'Could not save form draft.');
     } finally {
@@ -312,7 +312,11 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             leftIcon={<FileText className="w-3.5 h-3.5" />}
             title="Save as Draft and add to All Forms"
           >
-            Save as Draft
+            {form.status === 'draft' && isDraftSaved && !hasUnsavedChanges
+              ? 'Stored in Draft'
+              : hasUnsavedChanges && isDraftSaved
+              ? 'Update Draft*'
+              : 'Save as Draft'}
           </Button>
 
           {/* Publish Event Button */}
@@ -335,7 +339,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
-              <strong>Unsaved New Form Draft:</strong> This form is not yet in <strong>All Forms</strong>. Click <strong>"Save as Draft"</strong> to save and add it to All Forms, or <strong>"Publish Event"</strong> to make it live.
+              <strong>New Form Draft:</strong> This form is currently not stored in <strong>All Forms</strong>. Click <strong>"Save as Draft"</strong> to store it in All Forms, or <strong>"Publish Event"</strong> to make it live.
             </span>
           </div>
           <div className="flex items-center gap-2">

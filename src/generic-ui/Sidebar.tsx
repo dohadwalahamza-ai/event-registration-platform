@@ -2,7 +2,6 @@ import React from 'react';
 import {
   LayoutDashboard,
   FileSpreadsheet,
-  PlusCircle,
   Inbox,
   Sparkles,
   CalendarCheck2,
@@ -52,13 +51,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'All Forms',
       icon: <FileSpreadsheet className="w-4 h-4" />,
       badge: totalFormsCount > 0 ? totalFormsCount.toString() : null,
-    },
-    {
-      id: 'new-form' as NavigationTab,
-      label: 'Create New Form',
-      icon: <PlusCircle className="w-4 h-4" />,
-      badge: 'New',
-      badgeVariant: 'success' as const,
     },
     {
       id: 'responses' as NavigationTab,
@@ -117,7 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {navItems.map((item) => {
-            const isActive = currentTab === item.id;
+            const isActive = currentTab === item.id || (item.id === 'forms' && currentTab === 'new-form');
             return (
               <button
                 key={item.id}

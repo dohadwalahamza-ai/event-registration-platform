@@ -326,7 +326,7 @@ function AppContent() {
     setNewDraftForm(newForm);
     setActiveFormId(newId);
     navigateToTab('new-form', newId);
-    info('New Draft Created', 'Click "Save as Draft" to add this form to All Forms.');
+    info('Draft Form Opened', 'Customize your questions and click "Save as Draft" to store in All Forms.');
   };
 
   // Handle saving form from builder
