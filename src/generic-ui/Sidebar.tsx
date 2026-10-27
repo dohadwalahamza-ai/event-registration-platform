@@ -39,6 +39,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
   adminName,
   adminEmail,
 }) => {
+  // Track viewed responses so count disappears when clicked and does not stick
+  const [viewedResponsesCount, setViewedResponsesCount] = React.useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('last_viewed_response_count');
+      return saved ? parseInt(saved, 10) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  // Whenever user is currently on responses tab, mark them viewed
+  React.useEffect(() => {
+    if (currentTab === 'responses') {
+      setViewedResponsesCount(totalResponsesCount);
+      try {
+        localStorage.setItem('last_viewed_response_count', totalResponsesCount.toString());
+      } catch {}
+    }
+  }, [currentTab, totalResponsesCount]);
+
+  const unreadResponsesCount =
+    currentTab === 'responses'
+      ? 0
+      : Math.max(0, totalResponsesCount - viewedResponsesCount);
+
+  const handleTabClick = (tabId: NavigationTab) => {
+    if (tabId === 'responses') {
+      setViewedResponsesCount(totalResponsesCount);
+      try {
+        localStorage.setItem('last_viewed_response_count', totalResponsesCount.toString());
+      } catch {}
+    }
+    onSelectTab(tabId);
+    onCloseMobile();
+  };
+
   const navItems = [
     {
       id: 'dashboard' as NavigationTab,
@@ -56,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'responses' as NavigationTab,
       label: 'Responses',
       icon: <Inbox className="w-4 h-4" />,
-      badge: totalResponsesCount > 0 ? totalResponsesCount.toString() : null,
+      badge: unreadResponsesCount > 0 ? unreadResponsesCount.toString() : null,
       badgeVariant: 'info' as const,
     },
   ];
@@ -113,10 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  onSelectTab(item.id);
-                  onCloseMobile();
-                }}
+                onClick={() => handleTabClick(item.id)}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group ${
                   isActive
                     ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30 font-semibold'

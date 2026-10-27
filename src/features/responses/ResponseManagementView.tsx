@@ -276,7 +276,7 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
     );
   };
 
-  // Compute analytics statistics
+  // Compute analytics statistics based on actual questions and answers
   const analyticsData = useMemo(() => {
     const total = poolSubmissions.length;
     if (total === 0) {
@@ -296,51 +296,130 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
     const pending = poolSubmissions.filter((s) => s.status === 'pending').length;
     const cancelled = poolSubmissions.filter((s) => s.status === 'cancelled').length;
 
-    // Analyze categorical fields
-    const targetFields = activeFields.filter((f) =>
-      ['radio', 'select', 'yes_no', 'checkbox'].includes(f.field_type) ||
-      ['player_category', 'batting_style', 'bowling_style', 'jersey_size', 'is_participating', 'need_jersey'].includes(f.field_key)
+    // Filter for analyzable input questions (excluding layout headings and info text)
+    const targetFields = activeFields.filter(
+      (f) => !['section_heading', 'info_text'].includes(f.field_type)
     );
 
     const fieldStats = targetFields.map((field) => {
       const counts: Record<string, number> = {};
       let answeredCount = 0;
+      let numericSum = 0;
+      let numericCount = 0;
+      let minVal = Infinity;
+      let maxVal = -Infinity;
+
+      // If field has defined options (dropdown, radio, checkbox), pre-populate with 0 so all options are tracked
+      if (field.options && Array.isArray(field.options)) {
+        for (const opt of field.options) {
+          const optLabel = opt.label || opt.value;
+          if (optLabel) counts[optLabel] = 0;
+        }
+      } else if (field.field_type === 'yes_no' || field.field_type === 'consent_checkbox') {
+        counts['Yes'] = 0;
+        counts['No'] = 0;
+      }
 
       for (const sub of poolSubmissions) {
         const val = sub.submission_data ? sub.submission_data[field.field_key] : undefined;
         if (val !== undefined && val !== null && val !== '') {
           answeredCount++;
+
           if (Array.isArray(val)) {
             for (const item of val) {
               const str = String(item).trim();
-              counts[str] = (counts[str] || 0) + 1;
+              if (str) counts[str] = (counts[str] || 0) + 1;
             }
           } else if (typeof val === 'boolean') {
             const str = val ? 'Yes' : 'No';
             counts[str] = (counts[str] || 0) + 1;
+          } else if (field.field_type === 'rating') {
+            const num = Number(val);
+            if (!isNaN(num)) {
+              numericSum += num;
+              numericCount++;
+              const starStr = `${num} ${num === 1 ? 'Star' : 'Stars'}`;
+              counts[starStr] = (counts[starStr] || 0) + 1;
+            }
+          } else if (field.field_type === 'number') {
+            const num = Number(val);
+            if (!isNaN(num)) {
+              numericSum += num;
+              numericCount++;
+              if (num < minVal) minVal = num;
+              if (num > maxVal) maxVal = num;
+              const numStr = String(num);
+              counts[numStr] = (counts[numStr] || 0) + 1;
+            }
+          } else if (['file_upload', 'photo_upload'].includes(field.field_type)) {
+            counts['File Attached'] = (counts['File Attached'] || 0) + 1;
           } else {
             const str = String(val).trim();
-            counts[str] = (counts[str] || 0) + 1;
+            if (str) counts[str] = (counts[str] || 0) + 1;
           }
         }
       }
 
-      const breakdown = Object.entries(counts)
-        .map(([option, count]) => ({
-          option,
-          count,
-          percentage: total > 0 ? Math.round((count / total) * 100) : 0,
-        }))
-        .sort((a, b) => b.count - a.count);
+      // If file upload, also note unattached
+      if (['file_upload', 'photo_upload'].includes(field.field_type)) {
+        const unattached = total - answeredCount;
+        if (unattached > 0) {
+          counts['No File Attached'] = unattached;
+        }
+      }
+
+      // Calculate percentage based on answered count
+      const divisor = answeredCount > 0 ? answeredCount : total;
+      let rawBreakdown = Object.entries(counts).map(([option, count]) => ({
+        option,
+        count,
+        percentage: divisor > 0 ? Math.round((count / divisor) * 100) : 0,
+      }));
+
+      // If it's open text with many unique items, limit to top 6 and group remainder
+      if (rawBreakdown.length > 8 && ['short_text', 'long_text', 'email', 'phone'].includes(field.field_type)) {
+        rawBreakdown.sort((a, b) => b.count - a.count);
+        const top = rawBreakdown.slice(0, 6);
+        const remainingCount = rawBreakdown.slice(6).reduce((acc, curr) => acc + curr.count, 0);
+        if (remainingCount > 0) {
+          top.push({
+            option: `Other responses (${rawBreakdown.length - 6} values)`,
+            count: remainingCount,
+            percentage: divisor > 0 ? Math.round((remainingCount / divisor) * 100) : 0,
+          });
+        }
+        rawBreakdown = top;
+      } else {
+        rawBreakdown.sort((a, b) => b.count - a.count);
+      }
+
+      const responseRate = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
+
+      const summary: {
+        avg?: string;
+        min?: number;
+        max?: number;
+        ratingAvg?: string;
+      } = {};
+
+      if (field.field_type === 'rating' && numericCount > 0) {
+        summary.ratingAvg = (numericSum / numericCount).toFixed(1);
+      } else if (field.field_type === 'number' && numericCount > 0) {
+        summary.avg = (numericSum / numericCount).toFixed(1);
+        summary.min = minVal !== Infinity ? minVal : 0;
+        summary.max = maxVal !== -Infinity ? maxVal : 0;
+      }
 
       return {
         fieldKey: field.field_key,
         label: field.label,
         type: field.field_type,
         answeredCount,
-        breakdown,
+        responseRate,
+        breakdown: rawBreakdown,
+        summary,
       };
-    }).filter((stat) => stat.breakdown.length > 0);
+    });
 
     return {
       total,
@@ -761,7 +840,7 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
               <BarChart3 className="w-10 h-10 mx-auto text-slate-300" />
               <h4 className="text-sm font-bold text-slate-700">No question breakdown available</h4>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Once participants submit responses with options (player roles, jersey sizes, questions), detailed percentages will appear here.
+                Once participants submit responses to questions in this form, detailed percentage breakdowns will appear here.
               </p>
             </div>
           ) : (
@@ -773,48 +852,78 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                 >
                   <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
                     <div>
-                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded">
-                        {stat.fieldKey.replace(/_/g, ' ')}
+                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                        {stat.type.replace(/_/g, ' ')}
                       </span>
                       <h4 className="text-sm font-bold text-slate-900 mt-1.5">
                         {stat.label}
                       </h4>
                     </div>
-                    <span className="text-xs text-slate-400 font-semibold shrink-0">
-                      {stat.answeredCount} answered
-                    </span>
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-bold text-slate-800 block">
+                        {stat.answeredCount} of {analyticsData.total}
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        {stat.responseRate}% answered
+                      </span>
+                    </div>
                   </div>
 
+                  {/* Summary Metric Callouts (Ratings / Numbers) */}
+                  {stat.summary?.ratingAvg && (
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-amber-900">Average Rating</span>
+                      <span className="font-black text-amber-700 text-sm">
+                        ★ {stat.summary.ratingAvg} / 5.0
+                      </span>
+                    </div>
+                  )}
+
+                  {stat.summary?.avg && (
+                    <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200/80 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-indigo-900">Average Value</span>
+                      <span className="font-black text-indigo-700 text-sm">
+                        {stat.summary.avg} (Min: {stat.summary.min} • Max: {stat.summary.max})
+                      </span>
+                    </div>
+                  )}
+
                   {/* Percentage Progress Bars */}
-                  <div className="space-y-3">
-                    {stat.breakdown.map((item, idx) => {
-                      const color = colorPalette[idx % colorPalette.length];
-                      return (
-                        <div key={item.option} className="space-y-1">
-                          <div className="flex items-center justify-between text-xs font-semibold">
-                            <span className="text-slate-700 truncate max-w-[200px]">
-                              {item.option}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-400 font-normal">
-                                {item.count} resp
+                  {stat.breakdown.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic py-2">
+                      No responses recorded for this question yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {stat.breakdown.map((item, idx) => {
+                        const color = colorPalette[idx % colorPalette.length];
+                        return (
+                          <div key={item.option} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs font-semibold">
+                              <span className="text-slate-700 truncate max-w-[220px]" title={item.option}>
+                                {item.option}
                               </span>
-                              <span className="text-slate-900 font-bold w-10 text-right">
-                                {item.percentage}%
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400 font-normal">
+                                  {item.count} {item.count === 1 ? 'resp' : 'resps'}
+                                </span>
+                                <span className="text-slate-900 font-bold w-12 text-right">
+                                  {item.percentage}%
+                                </span>
+                              </div>
+                            </div>
+                            {/* Progress bar track */}
+                            <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full bg-gradient-to-r ${color} rounded-full transition-all duration-700`}
+                                style={{ width: `${Math.max(item.percentage, item.count > 0 ? 4 : 0)}%` }}
+                              />
                             </div>
                           </div>
-                          {/* Progress bar track */}
-                          <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full bg-gradient-to-r ${color} rounded-full transition-all duration-700`}
-                              style={{ width: `${Math.max(item.percentage, 3)}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -829,10 +938,16 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
         <Modal
           isOpen={Boolean(selectedSubmission)}
           onClose={() => setSelectedSubmission(null)}
-          title="Player & Registrant Profile"
-          description={`Registered on ${new Date(
-            selectedSubmission.submitted_at
-          ).toLocaleString()} • Ref ID: ${selectedSubmission.id}`}
+          title="Participant Registration Details"
+          description={(() => {
+            const submissionForm =
+              forms.find((f) => isSubmissionForForm(selectedSubmission, f)) ||
+              currentFilteredForm ||
+              form;
+            return `Form: ${submissionForm?.title || 'Event Registration'} • Registered on ${new Date(
+              selectedSubmission.submitted_at
+            ).toLocaleString()} • Ref ID: ${selectedSubmission.id}`;
+          })()}
           maxWidth="2xl"
           height="tall"
           footer={
@@ -866,14 +981,23 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
             </div>
           }
         >
-          <div className="space-y-6">
-            {/* 1. HERO PLAYER HEADER */}
-            {(() => {
-              const photo = getPlayerPhoto(selectedSubmission);
-              const phone = getPlayerPhone(selectedSubmission);
-              const cleanPhone = phone.replace(/[^0-9]/g, '');
+          {(() => {
+            const submissionForm =
+              forms.find((f) => isSubmissionForForm(selectedSubmission, f)) ||
+              currentFilteredForm ||
+              form;
 
-              return (
+            const formFields = (submissionForm?.fields || []).filter(
+              (f) => !['section_heading', 'info_text'].includes(f.field_type)
+            );
+
+            const photo = getPlayerPhoto(selectedSubmission);
+            const phone = getPlayerPhone(selectedSubmission);
+            const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
+
+            return (
+              <div className="space-y-6">
+                {/* 1. HERO PARTICIPANT HEADER */}
                 <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md flex flex-col sm:flex-row items-center sm:items-start gap-4">
                   {/* Photo / Avatar */}
                   <div className="relative shrink-0">
@@ -881,8 +1005,8 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                       <div className="relative group">
                         <img
                           src={photo}
-                          alt={selectedSubmission.applicant_name || 'Player'}
-                          className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 border-white/20 shadow-lg"
+                          alt={selectedSubmission.applicant_name || 'Participant'}
+                          className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-white/20 shadow-lg"
                         />
                         <a
                           href={photo}
@@ -894,21 +1018,18 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                         </a>
                       </div>
                     ) : (
-                      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-tr from-indigo-500 to-violet-500 text-white font-extrabold text-2xl flex items-center justify-center border-2 border-white/20 shadow-lg">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-indigo-500 to-violet-500 text-white font-extrabold text-2xl flex items-center justify-center border-2 border-white/20 shadow-lg">
                         {(selectedSubmission.applicant_name || 'P').slice(0, 2).toUpperCase()}
                       </div>
                     )}
                   </div>
 
-                  {/* Player Info Headline */}
-                  <div className="flex-1 text-center sm:text-left min-w-0 space-y-2">
+                  {/* Participant Info Headline */}
+                  <div className="flex-1 text-center sm:text-left min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
-                        {selectedSubmission.submission_data?.player_category || 'Player'}
-                      </span>
-                      {selectedSubmission.submission_data?.jersey_number !== undefined && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 border border-amber-400/30">
-                          Jersey #{selectedSubmission.submission_data.jersey_number}
+                      {submissionForm && (
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                          {submissionForm.title}
                         </span>
                       )}
                     </div>
@@ -926,14 +1047,12 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                           {selectedSubmission.applicant_email}
                         </a>
                       )}
-                      {phone && (
-                        <span>• {phone}</span>
-                      )}
+                      {phone && <span>• {phone}</span>}
                     </div>
 
-                    {/* Quick Action Chips: WhatsApp & Call */}
-                    <div className="pt-1 flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                      {cleanPhone && (
+                    {/* Quick Action Chips: WhatsApp & Call - ONLY IF phone was provided in form */}
+                    {cleanPhone && (
+                      <div className="pt-1 flex flex-wrap items-center justify-center sm:justify-start gap-2">
                         <a
                           href={`https://wa.me/${cleanPhone}`}
                           target="_blank"
@@ -943,23 +1062,21 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                           <MessageSquare className="w-3.5 h-3.5" />
                           <span>Chat on WhatsApp</span>
                         </a>
-                      )}
-                      {phone && (
                         <a
-                          href={`tel:${phone}`}
+                          href={`tel:${cleanPhone}`}
                           className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all"
                         >
                           <Phone className="w-3.5 h-3.5" />
-                          <span>Call Player</span>
+                          <span>Call</span>
                         </a>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 1-Click Status Switcher */}
                   <div className="bg-white/10 p-3 rounded-2xl border border-white/10 text-center space-y-1.5 shrink-0 w-full sm:w-auto">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 block">
-                      Player Status
+                      Status
                     </span>
                     <div className="flex items-center justify-center gap-1">
                       {(['confirmed', 'pending', 'cancelled'] as const).map((st) => (
@@ -968,7 +1085,7 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                           type="button"
                           disabled={statusUpdatingId === selectedSubmission.id}
                           onClick={() => handleUpdateStatus(selectedSubmission.id, st)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase cursor-pointer transition-all ${
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase cursor-pointer transition-all ${
                             selectedSubmission.status === st
                               ? st === 'confirmed'
                                 ? 'bg-emerald-500 text-white shadow'
@@ -984,152 +1101,191 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                     </div>
                   </div>
                 </div>
-              );
-            })()}
 
-            {/* 2. PLAYER ATTRIBUTES SUMMARY CARDS */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-center">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Role</span>
-                <span className="text-xs font-bold text-slate-800 mt-0.5 block truncate">
-                  {selectedSubmission.submission_data?.player_category || 'Participant'}
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-center">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Jersey Size</span>
-                <span className="text-xs font-bold text-slate-800 mt-0.5 block">
-                  {selectedSubmission.submission_data?.jersey_size || 'N/A'}
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-center">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Jersey No</span>
-                <span className="text-xs font-bold text-slate-800 mt-0.5 block">
-                  {selectedSubmission.submission_data?.jersey_number !== undefined
-                    ? `#${selectedSubmission.submission_data.jersey_number}`
-                    : 'N/A'}
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-center">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Jersey Name</span>
-                <span className="text-xs font-bold text-slate-800 mt-0.5 block truncate">
-                  {selectedSubmission.submission_data?.jersey_print_name || 'Standard'}
-                </span>
-              </div>
-            </div>
+                {/* 2. FORM QUESTIONS & ANSWERS (Strictly based on what is in this Form) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                      <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+                      <span>Form Responses & Answers</span>
+                    </h4>
+                    <span className="text-xs text-slate-400">
+                      {formFields.length} {formFields.length === 1 ? 'question' : 'questions'}
+                    </span>
+                  </div>
 
-            {/* 3. STRUCTURED SUBMISSION ANSWERS */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <Trophy className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Submitted Registration Details</span>
-              </h4>
+                  {formFields.length === 0 ? (
+                    <div className="p-6 bg-slate-50 border border-slate-200/80 rounded-xl text-center text-slate-400 text-xs">
+                      No configured questions found for this form.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {formFields.map((field) => {
+                        const val = selectedSubmission.submission_data
+                          ? selectedSubmission.submission_data[field.field_key]
+                          : undefined;
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {Object.entries(selectedSubmission.submission_data || {}).map(([key, val]) => {
-                  const matchedField = fieldsMap.get(key);
-                  const label = matchedField?.label || key.replace(/_/g, ' ');
+                        const isAnswered =
+                          val !== undefined &&
+                          val !== null &&
+                          val !== '' &&
+                          !(Array.isArray(val) && val.length === 0);
 
-                  // Photos / Images
-                  if (typeof val === 'string' && (val.startsWith('http') || val.startsWith('data:image'))) {
-                    return (
-                      <div
-                        key={key}
-                        className="sm:col-span-2 p-3 bg-white border border-slate-200 rounded-xl space-y-2"
-                      >
-                        <span className="text-xs font-bold text-slate-700 block">{label}</span>
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={val}
-                            alt="Applicant attachment"
-                            className="w-20 h-20 object-cover rounded-xl border border-slate-200 shadow-2xs"
-                          />
-                          <a
-                            href={val}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Open High Resolution
-                          </a>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // File upload object
-                  if (typeof val === 'object' && val !== null && (val as any).name) {
-                    return (
-                      <div
-                        key={key}
-                        className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <span className="font-semibold text-slate-700 block">{label}</span>
-                          <span className="text-slate-500 mt-0.5 block">
-                            {(val as any).name} ({(val as any).size})
-                          </span>
-                        </div>
-                        <FileText className="w-5 h-5 text-indigo-600" />
-                      </div>
-                    );
-                  }
-
-                  // Array (e.g. checkbox options)
-                  if (Array.isArray(val)) {
-                    return (
-                      <div key={key} className="p-3 bg-white border border-slate-200 rounded-xl">
-                        <span className="text-xs font-semibold text-slate-500 block mb-1">
-                          {label}
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {val.map((item, idx) => (
-                            <span
-                              key={idx}
-                              className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-semibold"
+                        // Photo / Image upload
+                        if (
+                          isAnswered &&
+                          typeof val === 'string' &&
+                          (val.startsWith('http') || val.startsWith('data:image'))
+                        ) {
+                          return (
+                            <div
+                              key={field.id || field.field_key}
+                              className="sm:col-span-2 p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl space-y-2"
                             >
-                              {String(item)}
+                              <span className="text-xs font-bold text-slate-700 block">{field.label}</span>
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={val}
+                                  alt={field.label}
+                                  className="w-20 h-20 object-cover rounded-xl border border-slate-200 shadow-2xs"
+                                />
+                                <a
+                                  href={val}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Open Attachment</span>
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // File object upload
+                        if (isAnswered && typeof val === 'object' && val !== null && (val as any).name) {
+                          return (
+                            <div
+                              key={field.id || field.field_key}
+                              className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center justify-between text-xs"
+                            >
+                              <div>
+                                <span className="font-bold text-slate-800 block">{field.label}</span>
+                                <span className="text-slate-500 mt-0.5 block">
+                                  {(val as any).name} ({(val as any).size})
+                                </span>
+                              </div>
+                              <FileText className="w-5 h-5 text-indigo-600 shrink-0" />
+                            </div>
+                          );
+                        }
+
+                        // Array / Multi-select
+                        if (isAnswered && Array.isArray(val)) {
+                          return (
+                            <div
+                              key={field.id || field.field_key}
+                              className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl space-y-1.5"
+                            >
+                              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block">
+                                {field.label}
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {val.map((item, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-2.5 py-0.5 rounded-lg font-bold"
+                                  >
+                                    {String(item)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Boolean / Yes-No
+                        if (isAnswered && typeof val === 'boolean') {
+                          return (
+                            <div
+                              key={field.id || field.field_key}
+                              className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center justify-between text-xs"
+                            >
+                              <span className="font-bold text-slate-700">{field.label}</span>
+                              <span
+                                className={`font-bold px-2.5 py-1 rounded-lg text-xs ${
+                                  val ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {val ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        // Standard text / number / dropdown / date / rating
+                        return (
+                          <div
+                            key={field.id || field.field_key}
+                            className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl space-y-1"
+                          >
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block">
+                              {field.label}
                             </span>
+                            {isAnswered ? (
+                              <span className="text-xs font-bold text-slate-900 block whitespace-pre-wrap">
+                                {String(val)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic block">
+                                Not provided
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Any extra submitted data not in form fields */}
+                  {(() => {
+                    const knownKeys = new Set(formFields.map((f) => f.field_key));
+                    const extraEntries = Object.entries(selectedSubmission.submission_data || {}).filter(
+                      ([k, v]) =>
+                        !knownKeys.has(k) &&
+                        !['applicant_name', 'applicant_email', 'applicant_phone'].includes(k) &&
+                        v !== undefined &&
+                        v !== null &&
+                        v !== ''
+                    );
+
+                    if (extraEntries.length === 0) return null;
+
+                    return (
+                      <div className="pt-3 space-y-2 border-t border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                          Additional Submitted Values
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {extraEntries.map(([k, v]) => (
+                            <div key={k} className="p-3 bg-white border border-slate-200 rounded-xl text-xs">
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase block">
+                                {k.replace(/_/g, ' ')}
+                              </span>
+                              <span className="font-semibold text-slate-800 mt-0.5 block">
+                                {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                              </span>
+                            </div>
                           ))}
                         </div>
                       </div>
                     );
-                  }
-
-                  // Boolean
-                  if (typeof val === 'boolean') {
-                    return (
-                      <div
-                        key={key}
-                        className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between text-xs"
-                      >
-                        <span className="font-semibold text-slate-600">{label}</span>
-                        <span
-                          className={`font-bold px-2 py-0.5 rounded-md text-xs ${
-                            val ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {val ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                    );
-                  }
-
-                  // Text / Number / Date
-                  return (
-                    <div key={key} className="p-3 bg-white border border-slate-200 rounded-xl">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block">
-                        {label}
-                      </span>
-                      <span className="text-xs font-bold text-slate-900 mt-0.5 block whitespace-pre-wrap">
-                        {String(val)}
-                      </span>
-                    </div>
-                  );
-                })}
+                  })()}
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </Modal>
       )}
     </div>
