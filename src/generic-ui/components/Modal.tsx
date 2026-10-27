@@ -50,18 +50,18 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
-      {/* Backdrop without blur - clean dark overlay */}
+      {/* Transparent backdrop - completely eliminates dark background layer */}
       <div
-        className="fixed inset-0 bg-slate-900/65 transition-opacity duration-200 animate-fade-in"
+        className="fixed inset-0 bg-transparent pointer-events-auto"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Centering wrapper ensuring modal is always in the proper middle area and never clipped */}
-      <div className="flex min-h-full items-center justify-center p-4 sm:p-6 lg:p-8 text-center">
+      <div className="flex min-h-full items-center justify-center p-4 sm:p-6 lg:p-8 text-center pointer-events-none">
         {/* Modal Dialog Content */}
         <div
-          className={`relative w-full ${maxWidths[maxWidth]} bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 text-left overflow-hidden z-10 transition-all transform animate-fade-in my-auto sm:my-8`}
+          className={`pointer-events-auto relative w-full ${maxWidths[maxWidth]} bg-white rounded-2xl sm:rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.25)] border border-slate-200/90 text-left overflow-hidden z-10 transition-all transform animate-fade-in my-auto sm:my-8`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
