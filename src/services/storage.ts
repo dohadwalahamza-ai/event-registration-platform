@@ -508,7 +508,21 @@ export class StorageService {
       }
     }
 
-    // 2. Query locally cached forms if Supabase is offline or not configured
+    // 2. Query pre-seeded forms (guarantees official forms like Owner Registration KCL Season 4 load instantly on any mobile device)
+    const seedFound = SAMPLE_FORMS.find(
+      (f) =>
+        !deletedIds.has(f.id) &&
+        (f.slug.toLowerCase() === cleanSlug ||
+          f.id.toLowerCase() === cleanSlug ||
+          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
+          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
+    );
+    if (seedFound) {
+      this.updateLocalFormCache(seedFound);
+      return seedFound;
+    }
+
+    // 3. Query locally cached forms if Supabase is offline or not configured
     let localForms: Form[] = [];
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
@@ -526,6 +540,7 @@ export class StorageService {
     const localFound = localForms.find(
       (f) =>
         !deletedIds.has(f.id) &&
+        f.title !== 'Event Registration Form' &&
         (f.slug.toLowerCase() === cleanSlug ||
           f.id.toLowerCase() === cleanSlug ||
           f.slug.toLowerCase() === `event-form-${coreSlug}` ||
@@ -539,12 +554,13 @@ export class StorageService {
 
     if (localFound) return localFound;
 
-    // 3. Fallback: Query all merged forms
+    // 4. Fallback: Query all merged forms
     try {
       const all = await this.getForms();
       const match = all.find(
         (f) =>
           !deletedIds.has(f.id) &&
+          f.title !== 'Event Registration Form' &&
           (f.slug.toLowerCase() === cleanSlug ||
             f.id.toLowerCase() === cleanSlug ||
             f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
@@ -552,16 +568,6 @@ export class StorageService {
       );
       if (match) return match;
     } catch {}
-
-    // 4. Sample forms fallback if requested
-    if (cleanSlug.includes('kpcl') || cleanSlug.includes('robotics')) {
-      const seedFound = SAMPLE_FORMS.find(
-        (f) =>
-          !deletedIds.has(f.id) &&
-          (f.slug.toLowerCase() === cleanSlug || f.id.toLowerCase() === cleanSlug)
-      );
-      if (seedFound) return seedFound;
-    }
 
     // 5. Standalone instant recovery for event slugs (e.g. mvph0jx2 or event-form-mvqecm9w)
     // Ensures a clean, working registration form opens immediately without blocking errors

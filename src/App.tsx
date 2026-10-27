@@ -452,18 +452,9 @@ function AppContent() {
     setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
   };
 
-  // Open public page with self-contained payload if available
-  const handleOpenPublicUrl = (slug: string, formToOpen?: Form) => {
-    const targetForm =
-      formToOpen ||
-      forms.find((f) => f.slug === slug || f.id === slug) ||
-      (activeForm && (activeForm.slug === slug || activeForm.id === slug) ? activeForm : undefined);
-    if (targetForm) {
-      const payload = packFormToUrlPayload(targetForm);
-      window.location.hash = payload ? `/e/${slug}?d=${payload}` : `/e/${slug}`;
-    } else {
-      window.location.hash = `/e/${slug}`;
-    }
+  // Open public page with clean URL
+  const handleOpenPublicUrl = (slug: string) => {
+    window.location.hash = `/e/${slug}`;
   };
 
   // Handle logout

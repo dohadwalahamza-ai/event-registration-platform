@@ -45,19 +45,18 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
   const activeSlug = form.slug || shortCode;
   const domainUrl = `${baseUrl}/#/e/${activeSlug}`;
 
-  // Pack compact form definition into query param so ANY scanning phone or link recipient loads it immediately
-  const packedPayload = packFormToUrlPayload(form);
-  const selfContainedUrl = packedPayload ? `${domainUrl}?d=${packedPayload}` : domainUrl;
+  // Clean public URL without long query payloads
+  const cleanUrl = domainUrl;
 
   const handleCopyLink = (url: string) => {
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
-    success('Link Copied!', 'Registration link copied to clipboard. Share it anywhere!');
+    success('Link Copied!', 'Clean public link copied to clipboard.');
   };
 
   const handleWhatsAppShare = () => {
-    const venueText = form.venue ? `\n📍 Venue: ${form.venue}` : '';
+    const venueText = form.venue && form.venue !== 'NA' ? `\n📍 Venue: ${form.venue}` : '';
     const dateText = form.event_date
       ? `\n📅 Date: ${new Date(form.event_date).toLocaleDateString(undefined, {
           weekday: 'short',
@@ -66,7 +65,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
           year: 'numeric',
         })}`
       : '';
-    const text = `🏸 *Event Registration is Open!*\n\n*${form.title}*${dateText}${venueText}\n\n👉 *Register online here:*\n${selfContainedUrl}`;
+    const text = `🏸 *Event Registration is Open!*\n\n*${form.title}*${dateText}${venueText}\n\n👉 *Register online here:*\n${cleanUrl}`;
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(whatsappUrl, '_blank');
   };
@@ -77,18 +76,18 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
         await navigator.share({
           title: form.title,
           text: `Register for ${form.title}:`,
-          url: selfContainedUrl,
+          url: cleanUrl,
         });
       } catch {
         // user cancelled share
       }
     } else {
-      handleCopyLink(selfContainedUrl);
+      handleCopyLink(cleanUrl);
     }
   };
 
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-    selfContainedUrl
+    cleanUrl
   )}`;
 
   return (
@@ -186,13 +185,13 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
             <div className="flex items-center gap-2">
               <div className="flex-1 flex items-center px-3 py-2 bg-white border border-indigo-200 rounded-xl text-xs font-mono text-indigo-950 truncate select-all shadow-2xs">
                 <Globe className="w-3.5 h-3.5 text-indigo-500 mr-2 shrink-0" />
-                <span className="truncate font-semibold">{selfContainedUrl}</span>
+                <span className="truncate font-semibold">{cleanUrl}</span>
               </div>
 
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => handleCopyLink(selfContainedUrl)}
+                onClick={() => handleCopyLink(cleanUrl)}
                 className="shrink-0"
                 leftIcon={
                   copied ? (
@@ -254,7 +253,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
               onError={(e) => {
                 const img = e.currentTarget;
                 if (!img.src.includes('quickchart.io')) {
-                  img.src = `https://quickchart.io/qr?size=300&text=${encodeURIComponent(selfContainedUrl)}`;
+                  img.src = `https://quickchart.io/qr?size=300&text=${encodeURIComponent(cleanUrl)}`;
                 }
               }}
             />
