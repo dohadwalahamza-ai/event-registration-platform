@@ -18,6 +18,7 @@ function extractSlugFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
   const hash = window.location.hash || '';
   const path = window.location.pathname || '';
+  const href = window.location.href || '';
 
   // 1. Check hash variations: #/e/:slug, #e/:slug, #/form/:slug
   const hashMatch = hash.match(/^#\/?(?:e|form)\/([^?&#]+)/i);
@@ -25,11 +26,20 @@ function extractSlugFromUrl(): string | null {
     return decodeURIComponent(hashMatch[1]).trim().replace(/\/+$/, '');
   }
 
-  // 2. Check path variations: /e/:slug, /form/:slug
-  const pathMatch = path.match(/^\/?(?:e|form)\/([^?&#/]+)/i);
+  // 2. Check path variations: /e/:slug, /form/:slug, /%23/e/:slug
+  const pathMatch = path.match(/^(?:\/%23)?\/?(?:e|form)\/([^?&#/]+)/i);
   if (pathMatch && pathMatch[1]) {
     return decodeURIComponent(pathMatch[1]).trim().replace(/\/+$/, '');
   }
+
+  // 3. Fallback check full decoded href
+  try {
+    const decodedHref = decodeURIComponent(href);
+    const hrefMatch = decodedHref.match(/[#/]e\/([A-Za-z0-9_-]+)/i);
+    if (hrefMatch && hrefMatch[1]) {
+      return hrefMatch[1].trim();
+    }
+  } catch {}
 
   return null;
 }
