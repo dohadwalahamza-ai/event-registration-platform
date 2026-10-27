@@ -6,7 +6,6 @@ import {
   Plus,
   ShieldCheck,
   LogOut,
-  Settings,
   ChevronDown,
   UserCheck,
   Inbox,
@@ -21,7 +20,6 @@ export interface HeaderProps {
   onToggleMobileSidebar: () => void;
   onCreateNewForm: () => void;
   isSupabaseConnected?: boolean;
-  onOpenSettings: () => void;
   onLogout?: () => void;
   adminName?: string;
   adminEmail?: string;
@@ -47,7 +45,6 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMobileSidebar,
   onCreateNewForm,
   isSupabaseConnected,
-  onOpenSettings,
   onLogout,
   adminName = 'Hamza Dohadwala',
   adminEmail = 'admin@admin.com',
@@ -267,19 +264,6 @@ export const Header: React.FC<HeaderProps> = ({
                     Verified Admin
                   </span>
                 </div>
-              </div>
-
-              <div className="py-1">
-                <button
-                  onClick={() => {
-                    setIsProfileOpen(false);
-                    onOpenSettings();
-                  }}
-                  className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2.5 text-slate-700 font-medium transition-colors"
-                >
-                  <Settings className="w-4 h-4 text-slate-400" />
-                  <span>Platform Settings</span>
-                </button>
               </div>
 
               <div className="pt-1 border-t border-slate-100">

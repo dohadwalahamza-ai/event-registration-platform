@@ -14,14 +14,13 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const STORAGE_AUTH_KEY = 'eventform_admin_session_v1';
+// 2.5 hours session duration (between 2-3 hours)
+const SESSION_DURATION_MS = 2.5 * 60 * 60 * 1000;
 
-const DEFAULT_DEMO_ADMIN: UserProfile = {
-  id: 'admin-1',
-  email: 'admin@admin.com',
-  name: 'Hamza Dohadwala',
-  role: 'admin',
-  created_at: new Date().toISOString(),
-};
+interface StoredSession {
+  user: UserProfile;
+  expiresAt: number;
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -30,85 +29,122 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Initialize session on mount
   useEffect(() => {
     const initAuth = async () => {
+      // 1. Check stored local session first
+      try {
+        const stored = localStorage.getItem(STORAGE_AUTH_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const sessionUser: UserProfile = parsed.user || parsed;
+          const expiresAt: number = parsed.expiresAt || 0;
+
+          // If expired, clear and force login
+          if (expiresAt && Date.now() > expiresAt) {
+            localStorage.removeItem(STORAGE_AUTH_KEY);
+            setUser(null);
+          } else {
+            setUser(sessionUser);
+          }
+        } else {
+          // Do NOT auto-login. Require explicit user authentication.
+          setUser(null);
+        }
+      } catch (err) {
+        console.error('Failed to read auth session', err);
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+
+      // 2. Optional Supabase session check if already active
       const supabase = getSupabaseClient();
       if (supabase) {
         try {
           const { data } = await supabase.auth.getSession();
           if (data.session?.user) {
-            setUser({
+            const supaProfile: UserProfile = {
               id: data.session.user.id,
-              email: data.session.user.email || 'admin@eventform.com',
-              name: data.session.user.user_metadata?.name || 'Administrator',
+              email: data.session.user.email || 'admin@admin.com',
+              name: data.session.user.user_metadata?.name || 'Hamza Dohadwala',
               role: 'admin',
               created_at: data.session.user.created_at,
-            });
-            setIsLoading(false);
-            return;
+            };
+            setUser(supaProfile);
+            const sessionData: StoredSession = {
+              user: supaProfile,
+              expiresAt: Date.now() + SESSION_DURATION_MS,
+            };
+            localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(sessionData));
           }
         } catch (e) {
           console.warn('Supabase session check error', e);
         }
-      }
-
-      // Check stored local session
-      try {
-        const stored = localStorage.getItem(STORAGE_AUTH_KEY);
-        if (stored) {
-          setUser(JSON.parse(stored));
-        } else {
-          // Pre-populate with default demo admin session for seamless first-run
-          setUser(DEFAULT_DEMO_ADMIN);
-          localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(DEFAULT_DEMO_ADMIN));
-        }
-      } catch (err) {
-        console.error('Failed to read auth session', err);
-      } finally {
-        setIsLoading(false);
       }
     };
 
     initAuth();
   }, []);
 
+  // Periodic session expiration watcher (auto-logout after 2.5 hours)
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      try {
+        const stored = localStorage.getItem(STORAGE_AUTH_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.expiresAt && Date.now() > parsed.expiresAt) {
+            console.info('Admin session expired (2.5h limit reached). Logging out automatically.');
+            logout();
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [user]);
+
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
-    const supabase = getSupabaseClient();
-
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-
-        if (error) {
-          setIsLoading(false);
-          return { success: false, error: error.message };
-        }
-
-        if (data.user) {
-          const profile: UserProfile = {
-            id: data.user.id,
-            email: data.user.email || email,
-            name: data.user.user_metadata?.name || email.split('@')[0],
-            role: 'admin',
-            created_at: data.user.created_at,
-          };
-          setUser(profile);
-          localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(profile));
-          setIsLoading(false);
-          return { success: true };
-        }
-      } catch (err: any) {
-        console.warn('Supabase login error, attempting fallback', err);
-      }
-    }
-
-    // Enforce strict administrator credentials restriction
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    if (cleanEmail !== 'admin@admin.com' || cleanPassword !== 'admin@123') {
+    // Verify authorized administrator credentials
+    const isAuthorizedAdmin = cleanEmail === 'admin@admin.com' && cleanPassword === 'admin@123';
+
+    if (!isAuthorizedAdmin) {
+      // If Supabase is connected, optionally check if this is an authorized Supabase admin
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: cleanPassword,
+          });
+
+          if (!error && data.user) {
+            const profile: UserProfile = {
+              id: data.user.id,
+              email: data.user.email || cleanEmail,
+              name: data.user.user_metadata?.name || 'Administrator',
+              role: 'admin',
+              created_at: data.user.created_at,
+            };
+            const sessionData: StoredSession = {
+              user: profile,
+              expiresAt: Date.now() + SESSION_DURATION_MS,
+            };
+            setUser(profile);
+            localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(sessionData));
+            setIsLoading(false);
+            return { success: true };
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       setIsLoading(false);
       return {
         success: false,
@@ -116,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
+    // Valid admin credentials (admin@admin.com / admin@123)
     const adminProfile: UserProfile = {
       id: 'admin-primary',
       email: 'admin@admin.com',
@@ -124,8 +161,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_at: new Date().toISOString(),
     };
 
+    const sessionData: StoredSession = {
+      user: adminProfile,
+      expiresAt: Date.now() + SESSION_DURATION_MS,
+    };
+
+    // Attempt Supabase sign-in asynchronously if configured (non-blocking)
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword }).catch(() => {});
+    }
+
     setUser(adminProfile);
-    localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(adminProfile));
+    localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(sessionData));
     setIsLoading(false);
     return { success: true };
   };
@@ -136,52 +184,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     name: string
   ): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
-    const supabase = getSupabaseClient();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            data: { name: name.trim() },
-          },
-        });
-
-        if (error) {
-          setIsLoading(false);
-          return { success: false, error: error.message };
-        }
-
-        if (data.user) {
-          const profile: UserProfile = {
-            id: data.user.id,
-            email: data.user.email || email,
-            name: name.trim() || 'Administrator',
-            role: 'admin',
-            created_at: data.user.created_at,
-          };
-          setUser(profile);
-          localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(profile));
-          setIsLoading(false);
-          return { success: true };
-        }
-      } catch (err: any) {
-        console.warn('Supabase signup error', err);
-      }
+    if (cleanEmail !== 'admin@admin.com') {
+      setIsLoading(false);
+      return {
+        success: false,
+        error: 'Sign up is restricted. Only admin@admin.com is permitted.',
+      };
     }
 
-    // Offline signup
-    const newProfile: UserProfile = {
-      id: `admin-${Math.random().toString(36).substring(2, 8)}`,
-      email: email.trim().toLowerCase(),
-      name: name.trim() || 'Event Administrator',
+    const profile: UserProfile = {
+      id: 'admin-primary',
+      email: 'admin@admin.com',
+      name: name.trim() || 'Hamza Dohadwala',
       role: 'admin',
       created_at: new Date().toISOString(),
     };
 
-    setUser(newProfile);
-    localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(newProfile));
+    const sessionData: StoredSession = {
+      user: profile,
+      expiresAt: Date.now() + SESSION_DURATION_MS,
+    };
+
+    setUser(profile);
+    localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(sessionData));
     setIsLoading(false);
     return { success: true };
   };

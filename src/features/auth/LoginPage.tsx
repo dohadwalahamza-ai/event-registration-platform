@@ -9,18 +9,15 @@ import {
   EyeOff,
   ArrowRight,
   Sparkles,
-  ExternalLink,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 
 interface LoginPageProps {
   onSuccess: () => void;
-  onViewSamplePublicEvent: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onSuccess,
-  onViewSamplePublicEvent,
 }) => {
   const [email, setEmail] = useState('admin@admin.com');
   const [password, setPassword] = useState('admin@123');
@@ -156,20 +153,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </button>
             <span className="text-[11px] text-slate-400 font-mono">Pass: admin@123</span>
           </div>
-        </div>
-
-        {/* Public Visitor Notice */}
-        <div className="mt-6 text-center space-y-2">
-          <p className="text-xs text-slate-400">
-            Are you a participant registering for an event?
-          </p>
-          <button
-            onClick={onViewSamplePublicEvent}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 underline underline-offset-4"
-          >
-            <span>Go to Public Cricket Registration Page (No Sign In Required)</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </button>
         </div>
       </div>
     </div>

@@ -88,6 +88,12 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
   const [selectedFormIds, setSelectedFormIds] = useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
+  // Automatically prune selected IDs whenever forms are deleted or changed
+  React.useEffect(() => {
+    const validIds = new Set(forms.map((f) => f.id));
+    setSelectedFormIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [forms]);
+
   const handleToggleSelect = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedFormIds((prev) =>
@@ -95,29 +101,34 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
     );
   };
 
+  const isAllFilteredSelected =
+    filteredForms.length > 0 && filteredForms.every((f) => selectedFormIds.includes(f.id));
+
   const handleSelectAll = () => {
-    if (selectedFormIds.length === filteredForms.length) {
-      setSelectedFormIds([]);
+    if (isAllFilteredSelected) {
+      const filteredIdSet = new Set(filteredForms.map((f) => f.id));
+      setSelectedFormIds((prev) => prev.filter((id) => !filteredIdSet.has(id)));
     } else {
-      setSelectedFormIds(filteredForms.map((f) => f.id));
+      const newSet = new Set([...selectedFormIds, ...filteredForms.map((f) => f.id)]);
+      setSelectedFormIds(Array.from(newSet));
     }
   };
 
   const confirmBulkDelete = async () => {
     if (selectedFormIds.length === 0) return;
     setIsBulkDeleting(true);
-    const count = selectedFormIds.length;
+    const toDelete = [...selectedFormIds];
+    setShowBulkDeleteConfirm(false);
     try {
       if (onDeleteForms) {
-        await onDeleteForms(selectedFormIds);
+        await onDeleteForms(toDelete);
       } else {
-        for (const id of selectedFormIds) {
+        for (const id of toDelete) {
           await onDeleteForm(id);
         }
       }
       setSelectedFormIds([]);
-      setShowBulkDeleteConfirm(false);
-      success('Forms Deleted', `${count} event forms were permanently deleted.`);
+      success('Forms Deleted', `${toDelete.length} event forms were permanently deleted.`);
     } catch {
       error('Delete Failed', 'Failed to delete some of the selected forms.');
     } finally {
@@ -229,7 +240,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
           >
             <div
               className={`flex items-center justify-center w-4 h-4 rounded border transition-all ${
-                selectedFormIds.length > 0 && selectedFormIds.length === filteredForms.length
+                isAllFilteredSelected
                   ? 'bg-indigo-600 border-indigo-600 text-white'
                   : selectedFormIds.length > 0
                   ? 'bg-indigo-100 border-indigo-500 text-indigo-700'
@@ -239,7 +250,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
               <Check className="w-3 h-3 stroke-[3]" />
             </div>
             <span>
-              {selectedFormIds.length === filteredForms.length
+              {isAllFilteredSelected
                 ? `Deselect All (${filteredForms.length})`
                 : `Select All (${filteredForms.length} forms)`}
             </span>
@@ -305,14 +316,15 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleToggleSelect(form.id, e)}
-                      className={`flex items-center justify-center w-7 h-7 rounded-lg shadow-sm transition-all border cursor-pointer ${
+                      className={`flex items-center justify-center w-7 h-7 rounded-lg shadow-md transition-all cursor-pointer border ${
                         isSelected
-                          ? 'bg-indigo-600 border-indigo-600 text-white scale-105 ring-2 ring-white/90 shadow'
-                          : 'bg-white/95 hover:bg-white border-slate-300/80 text-transparent hover:text-slate-300'
+                          ? 'bg-indigo-600 border-white text-white scale-105 ring-2 ring-indigo-500 shadow'
+                          : 'bg-white/95 hover:bg-white border-slate-300 text-slate-300 hover:text-slate-500'
                       }`}
-                      title={isSelected ? 'Deselect Form' : 'Select Form to Delete'}
+                      title={isSelected ? 'Deselect Form' : 'Select Form'}
+                      aria-label={isSelected ? `Deselect ${form.title}` : `Select ${form.title}`}
                     >
-                      <Check className="w-4 h-4 stroke-[3]" />
+                      <Check className={`w-4 h-4 stroke-[3] transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-60'}`} />
                     </button>
                   </div>
                   {form.cover_image_url ? (

@@ -4,7 +4,6 @@ import {
   FileSpreadsheet,
   PlusCircle,
   Inbox,
-  Settings,
   Sparkles,
   CalendarCheck2,
   ChevronRight,
@@ -14,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Badge } from './components/Badge';
 
-export type NavigationTab = 'dashboard' | 'forms' | 'new-form' | 'responses' | 'settings';
+export type NavigationTab = 'dashboard' | 'forms' | 'new-form' | 'responses';
 
 export interface SidebarProps {
   currentTab: NavigationTab;
@@ -67,12 +66,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <Inbox className="w-4 h-4" />,
       badge: totalResponsesCount > 0 ? totalResponsesCount.toString() : null,
       badgeVariant: 'info' as const,
-    },
-    {
-      id: 'settings' as NavigationTab,
-      label: 'Settings',
-      icon: <Settings className="w-4 h-4" />,
-      badge: null,
     },
   ];
 

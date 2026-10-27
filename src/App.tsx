@@ -11,7 +11,6 @@ import { DashboardView } from './features/dashboard/DashboardView';
 import { FormsListView } from './features/forms/FormsListView';
 import { FormBuilderView } from './features/builder/FormBuilderView';
 import { ResponseManagementView } from './features/responses/ResponseManagementView';
-import { SettingsView } from './features/settings/SettingsView';
 import { PublicRegistrationPage } from './features/public-registration/PublicRegistrationPage';
 import { Loader2 } from 'lucide-react';
 
@@ -70,8 +69,6 @@ function AppContent() {
         const parts = hash.split('/');
         if (parts[2]) setActiveFormId(parts[2]);
         setCurrentTab('responses');
-      } else if (hash.startsWith('#/settings')) {
-        setCurrentTab('settings');
       } else if (hash === '' || hash === '#' || hash.startsWith('#/dashboard')) {
         setCurrentTab('dashboard');
       }
@@ -88,7 +85,6 @@ function AppContent() {
     else if (tab === 'forms') window.location.hash = '#/forms';
     else if (tab === 'new-form') window.location.hash = formId ? `#/builder/${formId}` : '#/builder';
     else if (tab === 'responses') window.location.hash = formId ? `#/responses/${formId}` : '#/responses';
-    else if (tab === 'settings') window.location.hash = '#/settings';
   };
 
   useEffect(() => {
@@ -318,7 +314,7 @@ function AppContent() {
     };
 
     const saved = await StorageService.saveForm(newForm);
-    setForms((prev) => [saved, ...prev]);
+    setForms((prev) => (prev.some((f) => f.id === saved.id) ? prev : [saved, ...prev]));
     setActiveFormId(saved.id);
     navigateToTab('new-form', saved.id);
     success('Form Initialized', 'Start customizing fields and settings.');
@@ -333,7 +329,7 @@ function AppContent() {
   // Duplicate form
   const handleDuplicateForm = async (formId: string) => {
     const duplicated = await StorageService.duplicateForm(formId);
-    setForms((prev) => [duplicated, ...prev]);
+    setForms((prev) => (prev.some((f) => f.id === duplicated.id) ? prev : [duplicated, ...prev]));
     setActiveFormId(duplicated.id);
   };
 
@@ -347,17 +343,21 @@ function AppContent() {
       }
       return remaining;
     });
-    setSubmissions((prev) => prev.filter((s) => s.form_id !== formId));
-    setStats((prev) => ({
-      ...prev,
-      totalForms: Math.max(0, prev.totalForms - 1),
-    }));
+    const cleanId = formId.toLowerCase().replace(/^(event-form-|form-)/, '');
+    setSubmissions((prev) =>
+      prev.filter((s) => {
+        const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+        return s.form_id !== formId && subClean !== cleanId;
+      })
+    );
+    StorageService.getDashboardStats().then(setStats).catch(() => {});
   };
 
   // Bulk delete forms
   const handleDeleteForms = async (formIds: string[]) => {
     await StorageService.deleteForms(formIds);
     const idSet = new Set(formIds);
+    const cleanIdSet = new Set(formIds.map((id) => id.toLowerCase().replace(/^(event-form-|form-)/, '')));
     setForms((prev) => {
       const remaining = prev.filter((f) => !idSet.has(f.id));
       if (activeFormId && idSet.has(activeFormId)) {
@@ -365,11 +365,13 @@ function AppContent() {
       }
       return remaining;
     });
-    setSubmissions((prev) => prev.filter((s) => !idSet.has(s.form_id)));
-    setStats((prev) => ({
-      ...prev,
-      totalForms: Math.max(0, prev.totalForms - formIds.length),
-    }));
+    setSubmissions((prev) =>
+      prev.filter((s) => {
+        const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+        return !idSet.has(s.form_id) && !cleanIdSet.has(subClean);
+      })
+    );
+    StorageService.getDashboardStats().then(setStats).catch(() => {});
   };
 
   // Toggle publish status
@@ -466,7 +468,6 @@ function AppContent() {
     return (
       <LoginPage
         onSuccess={() => navigateToTab('dashboard')}
-        onViewSamplePublicEvent={() => handleOpenPublicUrl(forms[0]?.slug || 'kpcl-season-5')}
       />
     );
   }
@@ -496,7 +497,6 @@ function AppContent() {
       totalFormsCount={forms.length}
       totalResponsesCount={submissions.length}
       isSupabaseConnected={isSupabaseConnected}
-      onOpenSettings={() => navigateToTab('settings')}
       onPreviewSampleEvent={() => handleOpenPublicUrl(forms[0]?.slug || 'kpcl-season-5')}
       onLogout={handleLogout}
       adminName={user?.name}
@@ -550,28 +550,24 @@ function AppContent() {
       )}
 
       {/* TAB 4: RESPONSES VIEW */}
-      {currentTab === 'responses' && activeForm && (
+      {currentTab === 'responses' && (
         <ResponseManagementView
-          form={activeForm}
+          form={activeForm || forms[0]}
           forms={forms}
           allSubmissions={submissions}
-          submissions={submissions.filter((s) => isSubmissionForForm(s, activeForm))}
+          submissions={submissions}
+          initialSelectedFormId={activeFormId}
           onSelectForm={(id) => setActiveFormId(id)}
           onRefresh={handleRefreshSubmissions}
           isRefreshing={isRefreshingSubs}
           onDeleteSubmission={handleDeleteSubmission}
-          onBackToForms={() => navigateToTab('forms')}
-        />
-      )}
-
-      {/* TAB 5: SETTINGS */}
-      {currentTab === 'settings' && (
-        <SettingsView
-          isSupabaseConnected={isSupabaseConnected}
-          onRefreshConnection={() => {
-            const client = getSupabaseClient();
-            setIsSupabaseConnected(Boolean(client));
+          onUpdateStatus={async (id, status) => {
+            await StorageService.updateSubmissionStatus(id, status);
+            setSubmissions((prev) =>
+              prev.map((s) => (s.id === id ? { ...s, status } : s))
+            );
           }}
+          onBackToForms={() => navigateToTab('forms')}
         />
       )}
     </Layout>

@@ -52,8 +52,20 @@ function initializeStorage() {
   }
 
   const existingSubs = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
-  if (!existingSubs) {
-    localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(INITIAL_SUBMISSIONS));
+  if (existingSubs) {
+    try {
+      const parsedSubs: Submission[] = JSON.parse(existingSubs);
+      const realSubs = parsedSubs.filter(
+        (s) =>
+          !['sub-1', 'sub-2', 'sub-3'].includes(s.id) &&
+          !['Rohit Verma', 'Zaheer Khan', 'Dinesh Karthik'].includes(s.applicant_name || '')
+      );
+      if (realSubs.length !== parsedSubs.length) {
+        localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(realSubs));
+      }
+    } catch {}
+  } else {
+    localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify([]));
   }
 }
 
@@ -525,7 +537,11 @@ export class StorageService {
       const rawSubs = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
       if (rawSubs) {
         const parsedSubs: Submission[] = JSON.parse(rawSubs);
-        const filteredSubs = parsedSubs.filter((s) => s.form_id !== formId);
+        const cleanId = formId.toLowerCase().replace(/^(event-form-|form-)/, '');
+        const filteredSubs = parsedSubs.filter((s) => {
+          const subCleanId = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+          return s.form_id !== formId && subCleanId !== cleanId;
+        });
         localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(filteredSubs));
       }
     } catch (e) {
@@ -617,15 +633,19 @@ export class StorageService {
       }
     }
 
+    const isDummySubmission = (s: Submission) =>
+      ['sub-1', 'sub-2', 'sub-3'].includes(s.id) &&
+      ['Rohit Verma', 'Zaheer Khan', 'Dinesh Karthik'].includes(s.applicant_name || '');
+
     // 4. Merge remote and local submissions deduplicated by ID
     const mergedMap = new Map<string, Submission>();
     for (const s of remoteList) {
-      if (!deletedSubmissionIds.has(s.id)) {
+      if (!deletedSubmissionIds.has(s.id) && !isDummySubmission(s)) {
         mergedMap.set(s.id, s);
       }
     }
     for (const s of localList) {
-      if (!deletedSubmissionIds.has(s.id)) {
+      if (!deletedSubmissionIds.has(s.id) && !isDummySubmission(s)) {
         if (!mergedMap.has(s.id)) {
           mergedMap.set(s.id, s);
         }
@@ -783,6 +803,35 @@ export class StorageService {
     }
 
     return newSub;
+  }
+
+  static async updateSubmissionStatus(
+    submissionId: string,
+    status: 'confirmed' | 'pending' | 'cancelled'
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('submissions').update({ status }).eq('id', submissionId);
+      } catch (e) {
+        console.warn('Supabase status update error:', e);
+      }
+    }
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+      if (raw) {
+        const parsed: Submission[] = JSON.parse(raw);
+        const next = parsed.map((s) => (s.id === submissionId ? { ...s, status } : s));
+        localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(next));
+      }
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('submission_updated', { detail: { id: submissionId, status } })
+      );
+    }
   }
 
   static async deleteSubmission(submissionId: string): Promise<void> {

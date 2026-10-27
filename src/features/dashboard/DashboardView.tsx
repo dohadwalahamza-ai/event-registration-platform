@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
+import { isSubmissionForForm } from '../../services/storage';
 
 interface DashboardViewProps {
   stats: DashboardStats;
@@ -218,30 +219,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div className="space-y-3">
             {recentSubmissions.length === 0 ? (
-              <p className="text-xs text-slate-400 py-6 text-center">No registrations yet.</p>
+              <div className="py-8 text-center text-slate-400 space-y-1.5">
+                <p className="text-xs font-semibold text-slate-600">No registrations yet</p>
+                <p className="text-[11px] text-slate-400">
+                  Share your public event links to start receiving participant registrations.
+                </p>
+              </div>
             ) : (
-              recentSubmissions.slice(0, 5).map((sub) => (
-                <div
-                  key={sub.id}
-                  onClick={() => onViewResponses(sub.form_id)}
-                  className="p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50/80 transition-all cursor-pointer flex items-center justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-900 truncate">
-                      {sub.applicant_name || 'Participant'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {sub.applicant_email || 'No email provided'}
-                    </p>
+              recentSubmissions.slice(0, 5).map((sub) => {
+                const matchedForm = forms.find((f) => isSubmissionForForm(sub, f));
+                return (
+                  <div
+                    key={sub.id}
+                    onClick={() => onViewResponses(sub.form_id)}
+                    className="p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-slate-50/80 transition-all cursor-pointer flex items-center justify-between group"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
+                          {sub.applicant_name || 'Participant'}
+                        </p>
+                        {matchedForm && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium truncate max-w-[110px]">
+                            {matchedForm.title}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                        {sub.applicant_email || (sub.submission_data && (sub.submission_data.phone_number || sub.submission_data.whatsapp_number)) || 'Registration entry'}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-slate-400 shrink-0 font-medium">
+                      {new Date(sub.submitted_at).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
                   </div>
-                  <span className="text-[10px] text-slate-400 shrink-0 font-medium">
-                    {new Date(sub.submitted_at).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </span>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

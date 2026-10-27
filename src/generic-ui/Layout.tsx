@@ -11,7 +11,6 @@ export interface LayoutProps {
   totalFormsCount: number;
   totalResponsesCount: number;
   isSupabaseConnected: boolean;
-  onOpenSettings: () => void;
   onPreviewSampleEvent?: () => void;
   onLogout?: () => void;
   adminName?: string;
@@ -29,7 +28,6 @@ export const Layout: React.FC<LayoutProps> = ({
   totalFormsCount,
   totalResponsesCount,
   isSupabaseConnected,
-  onOpenSettings,
   onPreviewSampleEvent,
   onLogout,
   adminName,
@@ -64,7 +62,6 @@ export const Layout: React.FC<LayoutProps> = ({
           onToggleMobileSidebar={() => setIsMobileSidebarOpen(true)}
           onCreateNewForm={onCreateNewForm}
           isSupabaseConnected={isSupabaseConnected}
-          onOpenSettings={onOpenSettings}
           onLogout={onLogout || (() => {})}
           adminName={adminName}
           adminEmail={adminEmail}
