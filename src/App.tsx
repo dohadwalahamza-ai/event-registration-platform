@@ -13,6 +13,7 @@ import { FormBuilderView } from './features/builder/FormBuilderView';
 import { ResponseManagementView } from './features/responses/ResponseManagementView';
 import { PublicRegistrationPage } from './features/public-registration/PublicRegistrationPage';
 import { Loader2, FileQuestion } from 'lucide-react';
+import { Button } from './generic-ui/components/Button';
 import { sendSubmissionNotification } from './utils/desktopNotification';
 
 function extractSlugFromUrl(): string | null {
@@ -55,12 +56,32 @@ function extractSlugFromUrl(): string | null {
   return null;
 }
 
+function getInitialAdminRoute(): { tab: NavigationTab; formId: string | null } {
+  if (typeof window === 'undefined') {
+    return { tab: 'dashboard', formId: null };
+  }
+  const hash = window.location.hash || '';
+  if (hash.startsWith('#/forms')) return { tab: 'forms', formId: null };
+  if (hash.startsWith('#/builder')) {
+    const parts = hash.split('/');
+    const id = parts[2] ? decodeURIComponent(parts[2]).trim() : null;
+    return { tab: 'new-form', formId: id || null };
+  }
+  if (hash.startsWith('#/responses')) {
+    const parts = hash.split('/');
+    const id = parts[2] ? decodeURIComponent(parts[2]).trim() : null;
+    return { tab: 'responses', formId: id || null };
+  }
+  return { tab: 'dashboard', formId: null };
+}
+
 function AppContent() {
   const { user, isAuthenticated, isLoading: isAuthLoading, logout } = useAuth();
-  const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
+  const initialAdminRoute = getInitialAdminRoute();
+  const [currentTab, setCurrentTab] = useState<NavigationTab>(initialAdminRoute.tab);
   const [forms, setForms] = useState<Form[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [activeFormId, setActiveFormId] = useState<string | null>(null);
+  const [activeFormId, setActiveFormId] = useState<string | null>(initialAdminRoute.formId);
   const [isRefreshingSubs, setIsRefreshingSubs] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     totalForms: 0,
@@ -108,15 +129,22 @@ function AppContent() {
         setCurrentTab('forms');
       } else if (hash.startsWith('#/builder')) {
         const parts = hash.split('/');
-        if (parts[2]) {
-          setActiveFormId(parts[2]);
-          setNewDraftForm((prev) => (prev && prev.id === parts[2] ? prev : null));
+        const targetId = parts[2] ? decodeURIComponent(parts[2]).trim() : null;
+        if (targetId) {
+          setActiveFormId(targetId);
+          setNewDraftForm((prev) => (prev && prev.id === targetId ? prev : null));
+        } else {
+          // If at #/builder without ID, restore last edited form if available
+          const lastEdited = localStorage.getItem('eventform_last_edited_id');
+          if (lastEdited && !activeFormId) {
+            setActiveFormId(lastEdited);
+          }
         }
         setCurrentTab('new-form');
       } else if (hash.startsWith('#/responses')) {
         setNewDraftForm(null);
         const parts = hash.split('/');
-        if (parts[2]) setActiveFormId(parts[2]);
+        if (parts[2]) setActiveFormId(decodeURIComponent(parts[2]).trim());
         setCurrentTab('responses');
       } else if (hash === '' || hash === '#' || hash.startsWith('#/dashboard')) {
         setNewDraftForm(null);
@@ -129,7 +157,12 @@ function AppContent() {
     setCurrentTab(tab);
     setPublicSlug(null);
     setIsLoginRoute(false);
-    if (formId) setActiveFormId(formId);
+    if (formId) {
+      setActiveFormId(formId);
+      if (tab === 'new-form') {
+        localStorage.setItem('eventform_last_edited_id', formId);
+      }
+    }
 
     if (tab === 'dashboard') window.location.hash = '#/dashboard';
     else if (tab === 'forms') window.location.hash = '#/forms';
@@ -147,6 +180,35 @@ function AppContent() {
     };
   }, []);
 
+  // Periodic deadline & auto-expiration background job (Task 32)
+  useEffect(() => {
+    // Check and transition expired published forms immediately
+    StorageService.checkAndTransitionExpiredForms().catch(() => {});
+
+    // Recurring 30s interval
+    const interval = setInterval(() => {
+      StorageService.checkAndTransitionExpiredForms().catch(() => {});
+    }, 30000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        StorageService.checkAndTransitionExpiredForms().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    const handleFormsExpired = () => {
+      loadData();
+    };
+    window.addEventListener('forms_expired', handleFormsExpired);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('forms_expired', handleFormsExpired);
+    };
+  }, []);
+
   const loadData = async () => {
     // If opening a public form route, don't run heavy admin dashboard loading
     if (extractSlugFromUrl()) {
@@ -156,6 +218,9 @@ function AppContent() {
 
     setIsDataLoading(true);
     try {
+      // 1. Check and transition any expired published forms first (Task 32)
+      await StorageService.checkAndTransitionExpiredForms();
+
       const allForms = await StorageService.getForms();
       const allSubmissions = await StorageService.getAllSubmissions();
       const dashboardStats = await StorageService.getDashboardStats();
@@ -169,8 +234,14 @@ function AppContent() {
       setIsSupabaseConnected(Boolean(client));
       StorageService.syncLocalFormsToRemote().catch(() => {});
 
-      // Set active form default if none selected
-      if (!activeFormId && allForms.length > 0) {
+      // Task 31: Maintain exact route target form identifier on page load/refresh
+      const route = getInitialAdminRoute();
+      const currentTargetId = route.formId || activeFormId;
+
+      if (currentTargetId) {
+        setActiveFormId(currentTargetId);
+      } else if (allForms.length > 0 && route.tab !== 'new-form' && route.tab !== 'responses') {
+        // Only set default form for overview if none specified
         setActiveFormId(allForms[0].id);
       }
     } catch (e) {
@@ -397,6 +468,11 @@ function AppContent() {
   // Handle saving form from builder
   const handleSaveForm = async (updated: Form) => {
     const saved = await StorageService.saveForm(updated);
+    localStorage.setItem('eventform_last_edited_id', saved.id);
+    setActiveFormId(saved.id);
+    if (window.location.hash.startsWith('#/builder')) {
+      window.location.hash = `#/builder/${saved.id}`;
+    }
     setForms((prev) => {
       const idx = prev.findIndex((f) => f.id === saved.id);
       if (idx >= 0) {
@@ -469,9 +545,21 @@ function AppContent() {
     StorageService.getDashboardStats().then(setStats).catch(() => {});
   };
 
-  // Toggle publish status
+  // Toggle publish status with deadline validation (Task 32)
   const handleTogglePublish = async (form: Form) => {
     const nextStatus = form.status === 'published' ? 'draft' : 'published';
+
+    if (nextStatus === 'published' && form.registration_deadline) {
+      const deadline = new Date(form.registration_deadline).getTime();
+      if (!isNaN(deadline) && deadline <= Date.now()) {
+        error(
+          'Cannot Publish Expired Form',
+          'The registration deadline for this form has passed. Please update the deadline in settings before publishing.'
+        );
+        return;
+      }
+    }
+
     const updated: Form = { ...form, status: nextStatus };
     await StorageService.saveForm(updated);
     setForms((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
@@ -569,6 +657,7 @@ function AppContent() {
   }
 
   // Active form for builder or responses (matching ID, slug, or core normalized ID)
+  // Task 31: If an explicit form was requested and not found, do NOT fallback to forms[0]
   const activeForm =
     (newDraftForm && (activeFormId === newDraftForm.id || !activeFormId))
       ? newDraftForm
@@ -578,7 +667,7 @@ function AppContent() {
             f.slug === activeFormId ||
             (activeFormId && f.id.replace(/^(event-form-|form-)/, '') === activeFormId.replace(/^(event-form-|form-)/, '')) ||
             (activeFormId && f.slug.replace(/^(event-form-|form-)/, '') === activeFormId.replace(/^(event-form-|form-)/, ''))
-        ) || (currentTab === 'new-form' && newDraftForm ? newDraftForm : forms[0]);
+        ) || (currentTab === 'new-form' && newDraftForm ? newDraftForm : null);
 
   // 4. AUTHENTICATED ADMIN DASHBOARD
   return (
@@ -660,6 +749,29 @@ function AppContent() {
           onViewResponses={(id) => navigateToTab('responses', id)}
           onOpenLivePublicPage={handleOpenPublicUrl}
         />
+      )}
+
+      {/* TAB 3 (NOT FOUND / DELETED FORM) (Task 31) */}
+      {currentTab === 'new-form' && !activeForm && (
+        <div className="min-h-[60vh] flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-sm text-center space-y-4">
+            <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto border border-rose-100">
+              <FileQuestion className="w-7 h-7" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900">Form Not Found</h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              The form with identifier <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">{activeFormId || 'Unknown'}</code> could not be found. It may have been deleted or the link is invalid.
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button variant="outline" size="sm" onClick={() => navigateToTab('forms')}>
+                ← Back to All Forms
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleCreateNewForm}>
+                Create New Form
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* TAB 4: RESPONSES VIEW */}

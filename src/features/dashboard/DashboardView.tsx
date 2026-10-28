@@ -154,19 +154,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <h4 className="text-sm font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
                         {form.title}
                       </h4>
-                      <Badge
-                        variant={
-                          form.status === 'published'
-                            ? 'success'
-                            : form.status === 'closed'
-                            ? 'danger'
-                            : 'warning'
-                        }
-                        size="sm"
-                        dot
-                      >
-                        {form.status.toUpperCase()}
-                      </Badge>
+                      {(() => {
+                        const isExpired =
+                          form.registration_deadline &&
+                          new Date(form.registration_deadline).getTime() < Date.now();
+                        const label =
+                          isExpired && form.status === 'closed'
+                            ? 'EXPIRED'
+                            : form.status.toUpperCase();
+                        return (
+                          <Badge
+                            variant={
+                              form.status === 'published'
+                                ? 'success'
+                                : isExpired || form.status === 'closed'
+                                ? 'danger'
+                                : 'warning'
+                            }
+                            size="sm"
+                            dot
+                          >
+                            {label}
+                          </Badge>
+                        );
+                      })()}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">

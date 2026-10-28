@@ -44,6 +44,40 @@ function addDeletedSubmissionId(id: string) {
   localStorage.setItem(STORAGE_KEYS.DELETED_SUBMISSION_IDS, JSON.stringify(Array.from(set)));
 }
 
+/**
+ * Parse registration deadline string with timezone and date-boundary awareness (Task 32)
+ */
+export function parseFormDeadline(deadlineStr?: string | null): Date | null {
+  if (!deadlineStr || typeof deadlineStr !== 'string') return null;
+  const trimmed = deadlineStr.trim();
+  if (!trimmed) return null;
+
+  // If date-only format like 'YYYY-MM-DD', treat deadline as end of that day (23:59:59.999)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const endOfDay = new Date(`${trimmed}T23:59:59.999`);
+    if (!isNaN(endOfDay.getTime())) return endOfDay;
+  }
+
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+  return null;
+}
+
+/**
+ * Checks whether a form's registration deadline has passed (Task 32)
+ */
+export function isFormExpired(form: { registration_deadline?: string; status?: string } | null | undefined): boolean {
+  if (!form) return false;
+  if (form.status === 'closed') return true;
+
+  const deadline = parseFormDeadline(form.registration_deadline);
+  if (!deadline) return false;
+
+  return deadline.getTime() <= Date.now();
+}
+
 // Initialize local storage - keep forms clean so mobile browsers don't load stale samples
 function initializeStorage() {
   if (typeof window === 'undefined') return;
@@ -391,6 +425,40 @@ export class StorageService {
     } catch (e) {
       console.warn('Failed to clear stale form cache:', e);
     }
+  }
+
+  /**
+   * Automatically check all forms and transition any expired published forms to 'closed' (Task 32)
+   * Can be invoked periodically, on app start, or via Supabase / server function
+   */
+  static async checkAndTransitionExpiredForms(): Promise<string[]> {
+    const transitionedIds: string[] = [];
+    try {
+      const allForms = await this.getForms();
+      const now = Date.now();
+
+      for (const form of allForms) {
+        if (form.status === 'published' && form.registration_deadline) {
+          const deadline = parseFormDeadline(form.registration_deadline);
+          if (deadline && deadline.getTime() <= now) {
+            transitionedIds.push(form.id);
+            const updatedForm: Form = {
+              ...form,
+              status: 'closed',
+              updated_at: new Date().toISOString(),
+            };
+            await this.saveForm(updatedForm);
+          }
+        }
+      }
+
+      if (transitionedIds.length > 0 && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('forms_expired', { detail: transitionedIds }));
+      }
+    } catch (e) {
+      console.warn('Error checking expired forms:', e);
+    }
+    return transitionedIds;
   }
 
   /**
@@ -1093,8 +1161,25 @@ export class StorageService {
       if (matched) {
         resolvedFormId = matched.id;
         resolvedFormTitle = matched.title;
+
+        // Strict Server/Service Enforcement: Check Deadline & Closed Status (Task 32)
+        if (matched.status === 'closed') {
+          throw new Error('Registration is closed for this event. No further submissions are being accepted.');
+        }
+        if (isFormExpired(matched)) {
+          // Asynchronously transition form in database
+          this.checkAndTransitionExpiredForms().catch(() => {});
+          throw new Error('The registration deadline for this event has passed. No further registrations are being accepted.');
+        }
       }
-    } catch {}
+    } catch (validationErr: any) {
+      if (validationErr?.message && validationErr.message.includes('deadline')) {
+        throw validationErr;
+      }
+      if (validationErr?.message && validationErr.message.includes('closed')) {
+        throw validationErr;
+      }
+    }
 
     const newSub: Submission = {
       id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,

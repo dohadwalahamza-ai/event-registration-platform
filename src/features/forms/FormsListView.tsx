@@ -433,19 +433,30 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent" />
 
                   <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                    <Badge
-                      variant={
-                        form.status === 'published'
-                          ? 'success'
-                          : form.status === 'closed'
-                          ? 'danger'
-                          : 'warning'
-                      }
-                      size="sm"
-                      dot
-                    >
-                      {form.status.toUpperCase()}
-                    </Badge>
+                    {(() => {
+                      const isExpired =
+                        form.registration_deadline &&
+                        new Date(form.registration_deadline).getTime() < Date.now();
+                      const label =
+                        isExpired && form.status === 'closed'
+                          ? 'EXPIRED'
+                          : form.status.toUpperCase();
+                      return (
+                        <Badge
+                          variant={
+                            form.status === 'published'
+                              ? 'success'
+                              : isExpired || form.status === 'closed'
+                              ? 'danger'
+                              : 'warning'
+                          }
+                          size="sm"
+                          dot
+                        >
+                          {label}
+                        </Badge>
+                      );
+                    })()}
                   </div>
 
                   <div className="absolute bottom-2.5 left-3 right-3 text-white">

@@ -254,6 +254,23 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
     cleanUrl
   )}`;
 
+  const handlePublishToggle = (targetStatus: 'published' | 'closed') => {
+    if (targetStatus === 'published' && form.registration_deadline) {
+      const deadline = new Date(form.registration_deadline).getTime();
+      if (!isNaN(deadline) && deadline <= Date.now()) {
+        toastError(
+          'Cannot Publish Expired Form',
+          'The registration deadline for this form has passed. Please update the deadline in Form Settings before publishing.'
+        );
+        return;
+      }
+    }
+    onUpdateStatus(targetStatus);
+  };
+
+  const isExpired =
+    form.registration_deadline && new Date(form.registration_deadline).getTime() < Date.now();
+
   return (
     <Modal
       isOpen={isOpen}
@@ -272,13 +289,13 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
                 variant={
                   form.status === 'published'
                     ? 'success'
-                    : form.status === 'closed'
+                    : isExpired || form.status === 'closed'
                     ? 'danger'
                     : 'warning'
                 }
                 dot
               >
-                {form.status.toUpperCase()}
+                {isExpired && form.status === 'closed' ? 'EXPIRED' : form.status.toUpperCase()}
               </Badge>
               {syncStatus.checked && !syncStatus.rlsBlocked && (
                 <Badge variant="success" dot className="hidden sm:inline-flex">
@@ -289,7 +306,9 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
                 {form.status === 'published'
                   ? 'Accepting submissions'
                   : form.status === 'closed'
-                  ? 'Registration closed'
+                  ? isExpired
+                    ? 'Deadline expired'
+                    : 'Registration closed'
                   : 'Unpublished draft'}
               </span>
             </div>
@@ -299,7 +318,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => onUpdateStatus('closed')}
+                  onClick={() => handlePublishToggle('closed')}
                   className="text-amber-700 hover:bg-amber-50 h-7 text-xs px-2.5"
                 >
                   Close Registration
@@ -308,7 +327,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => onUpdateStatus('published')}
+                  onClick={() => handlePublishToggle('published')}
                   className="h-7 text-xs px-2.5"
                 >
                   {form.status === 'closed' ? 'Reopen Form' : 'Publish Now'}
