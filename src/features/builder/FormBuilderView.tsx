@@ -21,6 +21,7 @@ import {
   FileText,
   AlertTriangle,
   ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
@@ -55,10 +56,97 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isDraftSaved, setIsDraftSaved] = useState(!isNewDraft);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
   const { success, error } = useToast();
 
   const fields = form.fields || [];
   const selectedField = fields.find((f) => f.id === selectedFieldId) || null;
+
+  // Refs for autosave, race condition prevention, and debouncing
+  const lastSavedJsonRef = React.useRef<string>(JSON.stringify(initialForm));
+  const latestFormRef = React.useRef<Form>(form);
+  latestFormRef.current = form;
+  const isSavingRef = React.useRef<boolean>(false);
+  const pendingSaveRef = React.useRef<boolean>(false);
+  const autosaveTimeoutRef = React.useRef<any>(null);
+
+  // Core persistence handler that guards against overlapping saves
+  const executePersist = async (formToSave: Form, isExplicitAction: boolean = false) => {
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+
+    isSavingRef.current = true;
+    setIsSaving(true);
+    setSaveStatus('saving');
+    setSaveErrorMsg(null);
+
+    try {
+      await onSaveForm(formToSave);
+      lastSavedJsonRef.current = JSON.stringify(formToSave);
+      setSaveStatus('saved');
+      setHasUnsavedChanges(false);
+      setIsDraftSaved(true);
+    } catch (err: any) {
+      console.warn('Autosave error:', err);
+      setSaveStatus('error');
+      setSaveErrorMsg(err?.message || 'Save failed');
+      if (isExplicitAction) {
+        error('Save Failed', 'Could not save form configuration. Please retry.');
+      }
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
+
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        // Trigger another save with the freshest pending edits
+        setTimeout(() => executePersist(latestFormRef.current), 50);
+      }
+    }
+  };
+
+  // Debounced Autosave Effect
+  React.useEffect(() => {
+    const currentJson = JSON.stringify(form);
+    if (currentJson === lastSavedJsonRef.current) {
+      return;
+    }
+
+    setHasUnsavedChanges(true);
+    if (saveStatus !== 'saving') {
+      setSaveStatus('idle');
+    }
+
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    // Debounce by 1100ms so fast keystrokes don't flood the backend
+    autosaveTimeoutRef.current = setTimeout(() => {
+      executePersist(latestFormRef.current);
+    }, 1100);
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, [form]);
+
+  // Protect against silent data loss on browser refresh
+  React.useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges || isSavingRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // Add field from palette
   const handleAddField = (type: FormFieldType) => {
@@ -146,61 +234,32 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
     setHasUnsavedChanges(true);
   };
 
-  // Save changes
+  // Manual save trigger
   const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await onSaveForm(form);
-      setHasUnsavedChanges(false);
-      setIsDraftSaved(true);
-      success('Form Saved', `"${form.title}" saved successfully to All Forms.`);
-    } catch (err) {
-      error('Save Failed', 'Could not save form configuration.');
-    } finally {
-      setIsSaving(false);
-    }
+    await executePersist(form, true);
+    success('Form Saved', `"${form.title}" saved successfully to All Forms.`);
   };
 
   // Explicit Save as Draft
   const handleSaveDraft = async () => {
-    setIsSaving(true);
-    try {
-      const draftForm: Form = { ...form, status: 'draft', updated_at: new Date().toISOString() };
-      setForm(draftForm);
-      await onSaveForm(draftForm);
-      setHasUnsavedChanges(false);
-      setIsDraftSaved(true);
-      success('Stored in Draft', `"${draftForm.title}" is stored in Draft and added to All Forms.`);
-    } catch {
-      error('Save Failed', 'Could not save form draft.');
-    } finally {
-      setIsSaving(false);
-    }
+    const draftForm: Form = { ...form, status: 'draft', updated_at: new Date().toISOString() };
+    setForm(draftForm);
+    await executePersist(draftForm, true);
+    success('Stored in Draft', `"${draftForm.title}" is stored in Draft and added to All Forms.`);
   };
 
   // Explicit Publish Event
   const handlePublish = async () => {
-    setIsSaving(true);
-    try {
-      const publishedForm: Form = { ...form, status: 'published', updated_at: new Date().toISOString() };
-      setForm(publishedForm);
-      await onSaveForm(publishedForm);
-      setHasUnsavedChanges(false);
-      setIsDraftSaved(true);
-      success('Event Published', `"${publishedForm.title}" is published and live in All Forms!`);
-    } catch {
-      error('Publish Failed', 'Could not publish form.');
-    } finally {
-      setIsSaving(false);
-    }
+    const publishedForm: Form = { ...form, status: 'published', updated_at: new Date().toISOString() };
+    setForm(publishedForm);
+    await executePersist(publishedForm, true);
+    success('Event Published', `"${publishedForm.title}" is published and live in All Forms!`);
   };
 
   const handleUpdateStatus = async (newStatus: 'draft' | 'published' | 'closed') => {
-    const updated = { ...form, status: newStatus };
+    const updated: Form = { ...form, status: newStatus, updated_at: new Date().toISOString() };
     setForm(updated);
-    await onSaveForm(updated);
-    setIsDraftSaved(true);
-    setHasUnsavedChanges(false);
+    await executePersist(updated, true);
     success(
       `Status: ${newStatus.toUpperCase()}`,
       newStatus === 'published'
@@ -218,21 +277,21 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] -m-4 sm:-m-6 lg:-m-8 bg-slate-100 overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-100 overflow-hidden">
       {/* Top Builder Toolbar */}
-      <div className="h-14 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between shrink-0 z-30">
-        {/* Left: Back & Title info */}
-        <div className="flex items-center gap-3">
+      <div className="h-14 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between shrink-0 z-30 shadow-xs">
+        {/* Left: Back, Title info & Autosave Status */}
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={handleBackClick}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
             title="Back to All Forms"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
 
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-slate-900 truncate max-w-xs sm:max-w-md">
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-sm font-bold text-slate-900 truncate max-w-[140px] sm:max-w-xs md:max-w-md">
               {form.title || 'Untitled Form'}
             </h2>
             <Badge
@@ -248,6 +307,39 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             >
               {form.status.toUpperCase()}
             </Badge>
+
+            {/* Autosave Status Indicator */}
+            <div className="flex items-center gap-1.5 ml-1 sm:ml-2">
+              {saveStatus === 'saving' && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100 font-medium animate-pulse">
+                  <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
+                  Saving...
+                </span>
+              )}
+              {saveStatus === 'saved' && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 font-medium animate-fade-in">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  Saved
+                </span>
+              )}
+              {saveStatus === 'error' && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 font-medium">
+                  <AlertCircle className="w-3 h-3 text-rose-600" />
+                  Save failed
+                  <button
+                    onClick={() => executePersist(latestFormRef.current, true)}
+                    className="underline font-bold text-rose-800 hover:text-rose-950 ml-1 cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </span>
+              )}
+              {saveStatus === 'idle' && hasUnsavedChanges && (
+                <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+                  Unsaved edits...
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

@@ -40,12 +40,14 @@ export interface ConditionalRule {
   sourceFieldKey: string;
   operator: ConditionalOperator;
   value: string | number | boolean;
+  destination_section_id?: string;
 }
 
 export interface ConditionalRuleGroup {
   logic: 'AND' | 'OR';
-  action: 'show' | 'hide';
+  action: 'show' | 'hide' | 'skip_to_section';
   rules: ConditionalRule[];
+  destination_section_id?: string;
 }
 
 export interface FieldValidationRules {
@@ -95,6 +97,15 @@ export interface FormThemeConfig {
   customBackgroundColor?: string;
   fontFamily?: string;
   borderRadius: 'sm' | 'md' | 'lg' | 'xl';
+  presentationMode?: 'all_at_once' | 'step_by_step';
+}
+
+export interface FormSection {
+  id: string;
+  headingField?: FormField;
+  title: string;
+  description?: string;
+  fields: FormField[];
 }
 
 export interface Form {
@@ -116,6 +127,7 @@ export interface Form {
   created_at: string;
   updated_at: string;
   response_limit?: 'single' | 'multiple';
+  presentation_mode?: 'all_at_once' | 'step_by_step';
   fields?: FormField[];
 }
 

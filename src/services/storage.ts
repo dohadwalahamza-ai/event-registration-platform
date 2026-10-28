@@ -103,6 +103,7 @@ export function parseThemeConfig(raw: any): FormThemeConfig {
       backgroundStyle: val.backgroundStyle || 'banner_glass',
       borderRadius: val.borderRadius || 'xl',
       customBackgroundColor: val.customBackgroundColor || '#0f172a',
+      presentationMode: val.presentationMode || 'all_at_once',
     };
   }
   return {
@@ -112,6 +113,7 @@ export function parseThemeConfig(raw: any): FormThemeConfig {
     backgroundStyle: 'banner_glass',
     borderRadius: 'xl',
     customBackgroundColor: '#0f172a',
+    presentationMode: 'all_at_once',
   };
 }
 
@@ -132,6 +134,7 @@ export function packFormToUrlPayload(form: Form): string {
       st: form.status || 'published',
       sm: form.success_message || '',
       rl: form.response_limit || 'multiple',
+      pm: form.presentation_mode || 'all_at_once',
       th: form.theme_config || {},
       f: (form.fields || []).map((f) => ({
         i: f.id,
@@ -189,6 +192,7 @@ export function unpackFormFromUrlPayload(payload: string): Form | null {
       status: (raw.st as any) || 'published',
       success_message: raw.sm || 'Thank you for registering! We have recorded your submission.',
       response_limit: raw.rl || 'multiple',
+      presentation_mode: raw.pm || raw.th?.presentationMode || 'all_at_once',
       published_version: 1,
       theme_config: parseThemeConfig(raw.th),
       created_at: new Date().toISOString(),
@@ -728,7 +732,11 @@ export class StorageService {
           venue: updatedForm.venue?.trim() || null,
           status: updatedForm.status || 'published',
           registration_deadline: sanitizeTimestamp(updatedForm.registration_deadline),
-          theme_config: updatedForm.theme_config || {},
+          theme_config: {
+            ...updatedForm.theme_config,
+            presentationMode: updatedForm.presentation_mode || 'all_at_once',
+          },
+          presentation_mode: updatedForm.presentation_mode || 'all_at_once',
           success_message: updatedForm.success_message || 'Thank you! Your registration has been submitted successfully.',
           redirect_url: updatedForm.redirect_url?.trim() || null,
           published_version: updatedForm.published_version || 1,

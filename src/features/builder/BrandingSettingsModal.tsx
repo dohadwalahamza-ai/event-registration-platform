@@ -44,6 +44,9 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   const [customBackgroundColor, setCustomBackgroundColor] = useState<string>(
     parseThemeConfig(form.theme_config).customBackgroundColor || '#0f172a'
   );
+  const [presentationMode, setPresentationMode] = useState<'all_at_once' | 'step_by_step'>(
+    form.presentation_mode || 'all_at_once'
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -59,6 +62,7 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       const parsedTheme = parseThemeConfig(form.theme_config);
       setThemeConfig(parsedTheme);
       setCustomBackgroundColor(parsedTheme.customBackgroundColor || '#0f172a');
+      setPresentationMode(form.presentation_mode || parsedTheme.presentationMode || 'all_at_once');
     }
   }, [isOpen, form]);
 
@@ -193,9 +197,11 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       success_message: successMessage,
       redirect_url: redirectUrl,
       response_limit: form.response_limit || 'multiple',
+      presentation_mode: presentationMode,
       theme_config: {
         ...themeConfig,
         customBackgroundColor,
+        presentationMode,
       },
     });
     onClose();
@@ -529,6 +535,56 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Form Presentation Mode (Multi-Section Form Display) */}
+        <div className="space-y-3 pt-3 border-t border-slate-100">
+          <div>
+            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
+              Form Presentation Mode
+            </label>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Choose how sections and questions are presented to respondents in Preview and on public links.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setPresentationMode('all_at_once')}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                presentationMode === 'all_at_once'
+                  ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800">Mode A — All at once</span>
+                {presentationMode === 'all_at_once' && <Check className="w-4 h-4 text-indigo-600" />}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                Display all sections on a single page with section headings and a single submit action at the bottom.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPresentationMode('step_by_step')}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                presentationMode === 'step_by_step'
+                  ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800">Mode B — Step-by-step</span>
+                {presentationMode === 'step_by_step' && <Check className="w-4 h-4 text-indigo-600" />}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                Display one section at a time with "Next" and "Previous" controls. Validates required fields before advancing.
+              </p>
+            </button>
+          </div>
         </div>
 
         {/* Success Message & Redirect */}

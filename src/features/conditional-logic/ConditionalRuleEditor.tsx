@@ -21,16 +21,32 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
       !['section_heading', 'info_text'].includes(f.field_type)
   );
 
+  const availableSections = allFields
+    .filter(
+      (f) =>
+        f.field_type === 'section_heading' &&
+        f.id !== currentField.id &&
+        f.field_key !== currentField.field_key
+    )
+    .map((f, idx) => ({
+      id: f.id,
+      title: f.label || `Section ${idx + 1}`,
+    }));
+
   const ruleGroup = currentField.conditional_rules || {
     action: 'show',
     logic: 'AND',
     rules: [],
   };
 
-  const handleActionChange = (action: 'show' | 'hide') => {
+  const handleActionChange = (action: 'show' | 'hide' | 'skip_to_section') => {
     onChange({
       ...ruleGroup,
       action,
+      destination_section_id:
+        action === 'skip_to_section'
+          ? ruleGroup.destination_section_id || availableSections[0]?.id
+          : undefined,
     });
   };
 
@@ -156,13 +172,18 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
             <span className="font-semibold text-indigo-900">Rule:</span>
             <select
               value={ruleGroup.action}
-              onChange={(e) => handleActionChange(e.target.value as 'show' | 'hide')}
+              onChange={(e) => handleActionChange(e.target.value as 'show' | 'hide' | 'skip_to_section')}
               className="bg-white border border-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
             >
               <option value="show">SHOW</option>
               <option value="hide">HIDE</option>
+              {availableSections.length > 0 && (
+                <option value="skip_to_section">JUMP TO SECTION</option>
+              )}
             </select>
-            <span className="text-indigo-800">this field when</span>
+            <span className="text-indigo-800">
+              {ruleGroup.action === 'skip_to_section' ? 'when' : 'this field when'}
+            </span>
             {ruleGroup.rules.length > 1 && (
               <>
                 <select
@@ -177,6 +198,32 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
               </>
             )}
           </div>
+
+          {/* Target Destination Section Picker if action is skip_to_section */}
+          {ruleGroup.action === 'skip_to_section' && availableSections.length > 0 && (
+            <div className="p-3 bg-indigo-50/90 rounded-xl border border-indigo-200 text-xs space-y-1.5 animate-fade-in">
+              <span className="font-bold text-indigo-900 block">Target Destination Section:</span>
+              <select
+                value={ruleGroup.destination_section_id || availableSections[0]?.id || ''}
+                onChange={(e) =>
+                  onChange({
+                    ...ruleGroup,
+                    destination_section_id: e.target.value,
+                  })
+                }
+                className="w-full bg-white border border-indigo-300 font-semibold text-indigo-950 p-2 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+              >
+                {availableSections.map((sec) => (
+                  <option key={sec.id} value={sec.id}>
+                    Jump to: {sec.title}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-indigo-700 leading-snug">
+                When the condition matches, clicking "Next" navigates respondents directly to this section.
+              </p>
+            </div>
+          )}
 
           {/* List of rules */}
           <div className="space-y-2.5">
@@ -277,6 +324,30 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
                             className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 focus:bg-white"
                           />
                         )}
+                      </div>
+                    )}
+
+                    {availableSections.length > 0 && (
+                      <div className="sm:col-span-3 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase">
+                          Branch to Section:
+                        </span>
+                        <select
+                          value={rule.destination_section_id || ''}
+                          onChange={(e) =>
+                            handleUpdateRule(rule.id, {
+                              destination_section_id: e.target.value || undefined,
+                            })
+                          }
+                          className="bg-slate-50 border border-slate-200 rounded-lg p-1 text-[11px] text-slate-800 font-medium"
+                        >
+                          <option value="">Default Next Section</option>
+                          {availableSections.map((sec) => (
+                            <option key={sec.id} value={sec.id}>
+                              Go to: {sec.title}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     )}
                   </div>

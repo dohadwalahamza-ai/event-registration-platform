@@ -1,4 +1,4 @@
-import { FormField, ConditionalRule, ConditionalRuleGroup } from '../../types';
+import { FormField, ConditionalRule, ConditionalRuleGroup, FormSection } from '../../types';
 
 /**
  * Checks a single conditional rule against current form answers
@@ -145,6 +145,12 @@ export function evaluateFieldVisibility(
       ? ruleResults.some((res) => res === true)
       : ruleResults.every((res) => res === true);
 
+  // If the action is purely section branching / skip navigation, field itself remains visible
+  if (action === 'skip_to_section') {
+    evaluatedVisibilityCache.set(field.field_key, true);
+    return true;
+  }
+
   const isVisible = action === 'show' ? conditionMatches : !conditionMatches;
 
   evaluatedVisibilityCache.set(field.field_key, isVisible);
@@ -246,3 +252,141 @@ export function validateFormSubmission(
     errors,
   };
 }
+
+/**
+ * Split form fields into sections based on 'section_heading' dividers
+ */
+export function getFormSections(fields: FormField[]): FormSection[] {
+  const sections: FormSection[] = [];
+  let currentSection: FormSection | null = null;
+  let sectionIndex = 1;
+
+  for (const field of fields) {
+    if (field.field_type === 'section_heading') {
+      // Start a new section
+      currentSection = {
+        id: field.id,
+        headingField: field,
+        title: field.label || `Section ${sectionIndex}`,
+        description: field.description,
+        fields: [],
+      };
+      sections.push(currentSection);
+      sectionIndex++;
+    } else {
+      if (!currentSection) {
+        // Leading fields before any section heading
+        currentSection = {
+          id: 'section-initial',
+          title: 'General Information',
+          description: undefined,
+          fields: [],
+        };
+        sections.push(currentSection);
+      }
+      currentSection.fields.push(field);
+    }
+  }
+
+  // If no sections were created (e.g. empty form), supply a fallback default section
+  if (sections.length === 0) {
+    sections.push({
+      id: 'section-default',
+      title: 'Registration Form',
+      fields: [],
+    });
+  }
+
+  return sections;
+}
+
+/**
+ * Check if a section is visible (if it has a headingField, evaluate its condition)
+ */
+export function evaluateSectionVisibility(
+  section: FormSection,
+  allFields: FormField[],
+  formValues: Record<string, any>
+): boolean {
+  if (!section.headingField) return true;
+  return evaluateFieldVisibility(section.headingField, allFields, formValues);
+}
+
+/**
+ * Determine the next destination section index, evaluating conditional branching rules
+ */
+export function getNextSectionIndex(
+  currentSectionIndex: number,
+  sections: FormSection[],
+  allFields: FormField[],
+  formValues: Record<string, any>
+): number {
+  const currentSection = sections[currentSectionIndex];
+  if (!currentSection) return currentSectionIndex + 1;
+
+  // 1. Check for branching rules configured on fields within this section or on the section heading itself
+  const candidateFields = [
+    ...(currentSection.headingField ? [currentSection.headingField] : []),
+    ...currentSection.fields,
+  ];
+
+  for (const field of candidateFields) {
+    const rulesGroup = field.conditional_rules;
+    if (!rulesGroup) continue;
+
+    // Check individual rule level destination_section_id
+    if (rulesGroup.rules && rulesGroup.rules.length > 0) {
+      for (const rule of rulesGroup.rules) {
+        if (rule.destination_section_id && checkSingleRule(rule, formValues)) {
+          const targetIndex = sections.findIndex((s) => s.id === rule.destination_section_id);
+          if (targetIndex > currentSectionIndex) {
+            return targetIndex;
+          }
+        }
+      }
+
+      // Check group level skip_to_section action
+      if (
+        rulesGroup.action === 'skip_to_section' &&
+        rulesGroup.destination_section_id
+      ) {
+        const ruleResults = rulesGroup.rules.map((rule) => checkSingleRule(rule, formValues));
+        const conditionMatches =
+          rulesGroup.logic === 'OR'
+            ? ruleResults.some((res) => res === true)
+            : ruleResults.every((res) => res === true);
+
+        if (conditionMatches) {
+          const targetIndex = sections.findIndex(
+            (s) => s.id === rulesGroup.destination_section_id
+          );
+          if (targetIndex > currentSectionIndex) {
+            return targetIndex;
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Default: advance to the next sequentially visible section
+  for (let idx = currentSectionIndex + 1; idx < sections.length; idx++) {
+    if (evaluateSectionVisibility(sections[idx], allFields, formValues)) {
+      return idx;
+    }
+  }
+
+  // If no subsequent visible section, remain on last section
+  return sections.length - 1;
+}
+
+/**
+ * Validate only fields in the current section
+ */
+export function validateSectionFields(
+  sectionFields: FormField[],
+  formValues: Record<string, any>,
+  allFields: FormField[]
+): { isValid: boolean; errors: Record<string, string> } {
+  return validateFormSubmission(sectionFields, formValues);
+}
+

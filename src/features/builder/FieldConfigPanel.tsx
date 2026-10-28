@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FormField, FieldOption, ConditionalRuleGroup } from '../../types';
+import { FormField, FormFieldType, FieldOption, ConditionalRuleGroup } from '../../types';
 import { ConditionalRuleEditor } from '../conditional-logic/ConditionalRuleEditor';
 import {
   Settings,
@@ -10,6 +10,7 @@ import {
   Plus,
   X,
   Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface FieldConfigPanelProps {
@@ -26,6 +27,29 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'options' | 'validation' | 'logic'>('general');
+  const [showTypeWarning, setShowTypeWarning] = useState(false);
+
+  const handleTypeChange = (newType: FormFieldType) => {
+    if (newType === field.field_type) return;
+
+    const isNowChoice = ['radio', 'checkbox', 'dropdown'].includes(newType);
+    let updatedOptions = field.options;
+    if (isNowChoice && (!updatedOptions || updatedOptions.length === 0)) {
+      updatedOptions = [
+        { id: `opt-1`, label: 'Option 1', value: 'Option 1' },
+        { id: `opt-2`, label: 'Option 2', value: 'Option 2' },
+      ];
+    }
+
+    setShowTypeWarning(true);
+
+    onUpdate({
+      ...field,
+      field_type: newType,
+      options: updatedOptions,
+      required: ['section_heading', 'info_text'].includes(newType) ? false : field.required,
+    });
+  };
 
   const handleUpdate = (patch: Partial<FormField>) => {
     onUpdate({
@@ -162,6 +186,60 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
         {/* TAB 1: GENERAL */}
         {activeTab === 'general' && (
           <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-slate-700 font-semibold text-xs">
+                  Question Type
+                </label>
+                <span className="text-[10px] text-indigo-600 font-medium">Change anytime</span>
+              </div>
+              <select
+                value={field.field_type}
+                onChange={(e) => handleTypeChange(e.target.value as FormFieldType)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer"
+              >
+                <optgroup label="Text Inputs">
+                  <option value="short_text">Short Text (Single line)</option>
+                  <option value="long_text">Paragraph / Long Text (Multi-line)</option>
+                  <option value="email">Email Address</option>
+                  <option value="phone">Phone Number</option>
+                  <option value="number">Number</option>
+                  <option value="address">Address</option>
+                  <option value="website_url">Website URL</option>
+                </optgroup>
+                <optgroup label="Choices & Options">
+                  <option value="dropdown">Dropdown Selection</option>
+                  <option value="radio">Radio Buttons (Single choice)</option>
+                  <option value="checkbox">Checkboxes (Multiple choice)</option>
+                  <option value="yes_no">Yes / No Switch</option>
+                  <option value="consent_checkbox">Consent / Agreement Checkbox</option>
+                </optgroup>
+                <optgroup label="Date & Time">
+                  <option value="date">Date Picker</option>
+                  <option value="time">Time</option>
+                  <option value="datetime">Date & Time</option>
+                </optgroup>
+                <optgroup label="Uploads & Media">
+                  <option value="photo_upload">Photo / Profile Upload</option>
+                  <option value="file_upload">Document / File Upload</option>
+                </optgroup>
+                <optgroup label="Structure & Layout">
+                  <option value="section_heading">Section Divider / Heading</option>
+                  <option value="info_text">Informational Callout</option>
+                  <option value="rating">Rating (1 to 5 Stars)</option>
+                </optgroup>
+              </select>
+
+              {showTypeWarning && (
+                <div className="mt-2 p-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2 animate-fade-in">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="leading-snug">
+                    Question type updated. Question title and settings are preserved.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="block text-slate-700 font-semibold mb-1">
                 Question Title / Label

@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Form, FormField, FormThemeConfig } from '../../types';
+import { Form, FormField, FormThemeConfig, FormSection } from '../../types';
 import { FieldRenderer } from '../builder/FieldRenderer';
 import {
   evaluateFieldVisibility,
   validateFormSubmission,
   sanitizeSubmissionData,
+  getFormSections,
+  getNextSectionIndex,
+  evaluateSectionVisibility,
+  validateSectionFields,
 } from '../conditional-logic/evaluator';
 import { StorageService, parseThemeConfig } from '../../services/storage';
 import {
@@ -15,6 +19,7 @@ import {
   AlertTriangle,
   Lock,
   ArrowRight,
+  ArrowLeft,
   ExternalLink,
   RotateCcw,
   Sparkles,
@@ -40,6 +45,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [sectionHistory, setSectionHistory] = useState<number[]>([0]);
 
   // Reset all state when form ID or slug changes so no previous form state leaks
   useEffect(() => {
@@ -49,6 +56,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     setIsSubmitting(false);
     setIsSuccess(false);
     setSubmissionId(null);
+    setCurrentSectionIndex(0);
+    setSectionHistory([0]);
 
     // If fresh or clear cache flag is in URL, wipe old state
     const isFresh =
@@ -341,6 +350,20 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
 
   const isClosed = !isPreview && (form.status === 'closed' || isDeadlinePassed);
 
+  // Multi-section presentation configuration
+  const sections = getFormSections(fields);
+  const hasMultipleSections = sections.length > 1;
+  const isStepByStep =
+    (form.presentation_mode === 'step_by_step' ||
+      form.theme_config?.presentationMode === 'step_by_step') &&
+    hasMultipleSections;
+
+  const activeSectionIndex = Math.min(Math.max(0, currentSectionIndex), sections.length - 1);
+  const currentSection = sections[activeSectionIndex] || sections[0];
+  const nextTargetIndex = getNextSectionIndex(activeSectionIndex, sections, fields, formValues);
+  const isFinalSection =
+    !isStepByStep || nextTargetIndex <= activeSectionIndex || activeSectionIndex >= sections.length - 1;
+
   const handleFieldChange = (fieldKey: string, value: any) => {
     setFormValues((prev) => ({
       ...prev,
@@ -359,12 +382,64 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     }
   };
 
+  // Next section click handler: validates current section before advancing
+  const handleNextSection = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setSubmissionError(null);
+
+    const currentSectionFields = [
+      ...(currentSection.headingField ? [currentSection.headingField] : []),
+      ...currentSection.fields,
+    ];
+    const validation = validateSectionFields(currentSectionFields, formValues, fields);
+
+    if (!validation.isValid) {
+      setErrors(validation.errors);
+      const errorCount = Object.keys(validation.errors).length;
+      setSubmissionError(
+        `Please complete the required field${errorCount > 1 ? 's' : ''} in this section (${errorCount} missing) before continuing.`
+      );
+      const firstErrorKey = Object.keys(validation.errors)[0];
+      const element = document.getElementById(`field-${firstErrorKey}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
+    setErrors({});
+    const nextIdx = getNextSectionIndex(activeSectionIndex, sections, fields, formValues);
+    if (nextIdx > activeSectionIndex && nextIdx < sections.length) {
+      setSectionHistory((prev) => [...prev, nextIdx]);
+      setCurrentSectionIndex(nextIdx);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Previous section click handler: preserves entered answers and navigates back
+  const handlePrevSection = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setSubmissionError(null);
+    setErrors({});
+
+    if (sectionHistory.length > 1) {
+      const newHistory = [...sectionHistory];
+      newHistory.pop();
+      const prevIdx = newHistory[newHistory.length - 1] ?? 0;
+      setSectionHistory(newHistory);
+      setCurrentSectionIndex(prevIdx);
+    } else if (activeSectionIndex > 0) {
+      setCurrentSectionIndex(activeSectionIndex - 1);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isClosed) return;
     setSubmissionError(null);
 
-    // Validate visible fields
+    // Validate all visible fields across the entire form
     const validation = validateFormSubmission(fields, formValues);
     if (!validation.isValid) {
       setErrors(validation.errors);
@@ -372,6 +447,18 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
       setSubmissionError(
         `Please complete the required field${errorCount > 1 ? 's' : ''} (${errorCount} missing) marked in red above before submitting.`
       );
+
+      // If in step-by-step mode, locate section containing first error and jump to it
+      if (isStepByStep) {
+        const firstErrorKey = Object.keys(validation.errors)[0];
+        const targetSectionIdx = sections.findIndex((s) =>
+          s.fields.some((f) => f.field_key === firstErrorKey) ||
+          s.headingField?.field_key === firstErrorKey
+        );
+        if (targetSectionIdx >= 0) {
+          setCurrentSectionIndex(targetSectionIdx);
+        }
+      }
 
       // Scroll to first error smoothly
       const firstErrorKey = Object.keys(validation.errors)[0];
@@ -784,9 +871,37 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           </div>
         </div>
 
+        {/* Multi-Section Step Progress Indicator (Visible in Mode B — Step-by-step) */}
+        {isStepByStep && hasMultipleSections && (
+          <div className={`rounded-2xl p-4 sm:p-5 border shadow-sm space-y-2.5 animate-fade-in ${atmosphere.cardClass}`}>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-indigo-600 uppercase tracking-wider">
+                Section {activeSectionIndex + 1} of {sections.length}
+              </span>
+              <span className={`font-semibold truncate max-w-xs ${atmosphere.headingClass}`}>
+                {currentSection.title}
+              </span>
+            </div>
+            <div className="w-full bg-slate-200/80 dark:bg-white/10 rounded-full h-2 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${Math.round(((activeSectionIndex + 1) / sections.length) * 100)}%`,
+                  backgroundColor: accentColor,
+                }}
+              />
+            </div>
+            {currentSection.description && (
+              <p className={`text-xs mt-1 ${atmosphere.descClass}`}>
+                {currentSection.description}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Dynamic Form Questions Container */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {fields.map((field) => {
+          {(isStepByStep ? currentSection.fields : fields).map((field) => {
             // Evaluate conditional visibility reactive to formValues
             const isVisible = evaluateFieldVisibility(field, fields, formValues);
             if (!isVisible) return null;
@@ -823,24 +938,52 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
             </div>
           )}
 
-          {/* Bottom Submit Bar */}
-          <div className={`rounded-2xl p-6 border shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 ${atmosphere.cardClass}`}>
-            <div className={`text-xs ${atmosphere.descClass}`}>
-              <span className={`font-semibold ${atmosphere.headingClass}`}>Protected Submission:</span> Your
-              responses are saved directly to the database.
+          {/* Bottom Navigation & Action Bar */}
+          <div className={`rounded-2xl p-5 sm:p-6 border shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 ${atmosphere.cardClass}`}>
+            <div>
+              {isStepByStep && activeSectionIndex > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePrevSection}
+                  leftIcon={<ArrowLeft className="w-4 h-4" />}
+                >
+                  Previous Section
+                </Button>
+              ) : (
+                <div className={`text-xs ${atmosphere.descClass}`}>
+                  <span className={`font-semibold ${atmosphere.headingClass}`}>Official Registration:</span> Data is safely recorded directly to the database.
+                </div>
+              )}
             </div>
 
-            <Button
-              type="submit"
-              size="lg"
-              variant="primary"
-              isLoading={isSubmitting}
-              rightIcon={<ArrowRight className="w-4 h-4" />}
-              className="w-full sm:w-auto"
-              style={{ backgroundColor: accentColor }}
-            >
-              Submit Registration
-            </Button>
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              {isStepByStep && !isFinalSection ? (
+                <Button
+                  type="button"
+                  size="lg"
+                  variant="primary"
+                  onClick={handleNextSection}
+                  rightIcon={<ArrowRight className="w-4 h-4" />}
+                  className="w-full sm:w-auto"
+                  style={{ backgroundColor: accentColor }}
+                >
+                  Next Section
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  size="lg"
+                  variant="primary"
+                  isLoading={isSubmitting}
+                  rightIcon={<ArrowRight className="w-4 h-4" />}
+                  className="w-full sm:w-auto"
+                  style={{ backgroundColor: accentColor }}
+                >
+                  Submit Registration
+                </Button>
+              )}
+            </div>
           </div>
         </form>
 
