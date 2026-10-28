@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Users,
   UserCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
@@ -315,20 +316,22 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             Theme & Banner
           </Button>
 
-          {/* Live Preview Toggle */}
+          {/* Live Preview in New Tab */}
           <Button
             size="sm"
-            variant={isPreviewMode ? 'secondary' : 'outline'}
-            onClick={() => setIsPreviewMode(!isPreviewMode)}
-            leftIcon={
-              isPreviewMode ? (
-                <EyeOff className="w-3.5 h-3.5 text-slate-600" />
-              ) : (
-                <Eye className="w-3.5 h-3.5 text-slate-600" />
-              )
-            }
+            variant="outline"
+            onClick={async () => {
+              if (hasUnsavedChanges || !isDraftSaved) {
+                await onSaveForm(form);
+                setIsDraftSaved(true);
+                setHasUnsavedChanges(false);
+              }
+              window.open(`/e/${form.slug}`, '_blank');
+            }}
+            leftIcon={<ExternalLink className="w-3.5 h-3.5 text-slate-600" />}
+            title="Preview live form in a new browser tab"
           >
-            {isPreviewMode ? 'Edit Mode' : 'Preview'}
+            Preview
           </Button>
 
           {/* Publish / Share Button (if already saved) */}

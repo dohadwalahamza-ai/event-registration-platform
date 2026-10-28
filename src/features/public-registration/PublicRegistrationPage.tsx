@@ -84,6 +84,47 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     }
   }, [form.id, form.slug]);
 
+  // Dynamic document title and OpenGraph meta tags for social sharing
+  useEffect(() => {
+    if (!form || typeof window === 'undefined') return;
+    const previousTitle = document.title;
+    const formTitle = form.title ? `${form.title} | Event Registration` : 'Event Registration';
+    document.title = formTitle;
+
+    const setMetaTag = (attr: 'name' | 'property', key: string, content: string) => {
+      let tag = document.querySelector(`meta[${attr}="${key}"]`);
+      if (!tag) {
+        tag = document.createElement('meta');
+        tag.setAttribute(attr, key);
+        document.head.appendChild(tag);
+      }
+      tag.setAttribute('content', content);
+    };
+
+    const description =
+      form.description?.trim() ||
+      `Register online for ${form.title}. Fill out the official registration form to participate.`;
+    const canonicalUrl = `${window.location.origin}/e/${(form.slug || form.id).trim()}`;
+    const imageUrl =
+      form.cover_image_url?.trim() ||
+      'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';
+
+    setMetaTag('name', 'description', description);
+    setMetaTag('property', 'og:title', form.title);
+    setMetaTag('property', 'og:description', description);
+    setMetaTag('property', 'og:image', imageUrl);
+    setMetaTag('property', 'og:url', canonicalUrl);
+    setMetaTag('property', 'og:type', 'website');
+    setMetaTag('name', 'twitter:card', 'summary_large_image');
+    setMetaTag('name', 'twitter:title', form.title);
+    setMetaTag('name', 'twitter:description', description);
+    setMetaTag('name', 'twitter:image', imageUrl);
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [form.title, form.description, form.slug, form.id, form.cover_image_url]);
+
   const fields = form.fields || [];
   const theme: FormThemeConfig = parseThemeConfig(form.theme_config);
 

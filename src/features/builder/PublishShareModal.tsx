@@ -15,7 +15,9 @@ import {
   Download,
   Smartphone,
   AlertTriangle,
-  Sparkles,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
 } from 'lucide-react';
 import { Badge } from '../../generic-ui/components/Badge';
 import { useToast } from '../../generic-ui/ToastContext';
@@ -38,11 +40,160 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
   onOpenLivePreview,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [isDownloadingImage, setIsDownloadingImage] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ checked: boolean; rlsBlocked: boolean }>({
     checked: false,
     rlsBlocked: false,
   });
-  const { success } = useToast();
+  const { success, error: toastError } = useToast();
+
+  const sanitizedFileName = (form.title || 'event-registration')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  const handleDownloadImage = async () => {
+    setIsDownloadingImage(true);
+    try {
+      const response = await fetch(qrCodeUrl);
+      if (!response.ok) throw new Error('Fetch failed');
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${sanitizedFileName}-qr-code.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      success('QR Code Downloaded', 'Saved as PNG image.');
+    } catch {
+      try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 300;
+          canvas.height = 300;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 300, 300);
+            ctx.drawImage(img, 0, 0, 300, 300);
+            canvas.toBlob((b) => {
+              if (b) {
+                const bUrl = URL.createObjectURL(b);
+                const a = document.createElement('a');
+                a.href = bUrl;
+                a.download = `${sanitizedFileName}-qr-code.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(bUrl);
+                success('QR Code Downloaded', 'Saved as PNG image.');
+              }
+            }, 'image/png');
+          }
+        };
+        img.src = qrCodeUrl;
+      } catch {
+        toastError('Download Failed', 'Could not download QR code image.');
+      }
+    } finally {
+      setIsDownloadingImage(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    setIsDownloadingPdf(true);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Top banner
+      doc.setFillColor(79, 70, 229);
+      doc.rect(0, 0, pageWidth, 24, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('EVENT REGISTRATION', pageWidth / 2, 16, { align: 'center' });
+
+      // Title
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      const splitTitle = doc.splitTextToSize(form.title, pageWidth - 40);
+      doc.text(splitTitle, pageWidth / 2, 38, { align: 'center' });
+
+      let currentY = 38 + splitTitle.length * 7;
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+
+      if (form.event_date) {
+        const dateStr = new Date(form.event_date).toLocaleDateString(undefined, {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+        doc.text(`Date: ${dateStr}`, pageWidth / 2, currentY, { align: 'center' });
+        currentY += 6;
+      }
+      if (form.venue && form.venue !== 'NA') {
+        doc.text(`Venue: ${form.venue}`, pageWidth / 2, currentY, { align: 'center' });
+        currentY += 6;
+      }
+
+      // Convert QR to base64
+      const response = await fetch(qrCodeUrl);
+      const blob = await response.blob();
+      const reader = new FileReader();
+
+      await new Promise<void>((resolve, reject) => {
+        reader.onloadend = () => {
+          try {
+            const base64data = reader.result as string;
+            const qrSize = 90;
+            const qrX = (pageWidth - qrSize) / 2;
+            currentY += 6;
+
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.5);
+            doc.roundedRect(qrX - 5, currentY - 5, qrSize + 10, qrSize + 10, 4, 4, 'S');
+            doc.addImage(base64data, 'PNG', qrX, currentY, qrSize, qrSize);
+
+            currentY += qrSize + 15;
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(79, 70, 229);
+            doc.text('Scan with phone camera to register', pageWidth / 2, currentY, { align: 'center' });
+
+            currentY += 7;
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Online Registration Link: ${cleanUrl}`, pageWidth / 2, currentY, { align: 'center' });
+
+            doc.save(`${sanitizedFileName}-qr-code.pdf`);
+            success('PDF Downloaded', 'Printable registration document saved.');
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      console.error('PDF generation error', err);
+      toastError('Download Failed', 'Could not generate PDF file.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && form) {
@@ -318,16 +469,35 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
             <span>Point phone camera to scan & open</span>
           </div>
 
-          <a
-            href={qrCodeUrl}
-            download={`${activeSlug}-qr-code.png`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 shadow-2xs transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download QR Code Image</span>
-          </a>
+          <div className="w-full space-y-2 pt-1">
+            <button
+              type="button"
+              disabled={isDownloadingImage}
+              onClick={handleDownloadImage}
+              className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isDownloadingImage ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <ImageIcon className="w-3.5 h-3.5" />
+              )}
+              <span>{isDownloadingImage ? 'Downloading...' : 'Download QR (PNG)'}</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isDownloadingPdf}
+              onClick={handleDownloadPDF}
+              className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isDownloadingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileText className="w-3.5 h-3.5" />
+              )}
+              <span>{isDownloadingPdf ? 'Generating PDF...' : 'Download QR (PDF)'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </Modal>
