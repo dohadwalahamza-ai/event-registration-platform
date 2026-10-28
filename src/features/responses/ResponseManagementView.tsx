@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Form, Submission, FormField } from '../../types';
 import {
   Download,
@@ -32,6 +32,13 @@ import {
   ArrowUp,
   ArrowDown,
   Edit,
+  FolderOpen,
+  Layers,
+  Globe,
+  Bell,
+  BellRing,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
@@ -39,6 +46,10 @@ import { Modal } from '../../generic-ui/components/Modal';
 import { useToast } from '../../generic-ui/ToastContext';
 import { isSubmissionForForm, StorageService } from '../../services/storage';
 import { AnalyticsCharts } from './AnalyticsCharts';
+import {
+  isDesktopNotificationEnabled,
+  toggleDesktopNotifications,
+} from '../../utils/desktopNotification';
 
 interface ResponseManagementViewProps {
   form: Form;
@@ -67,10 +78,37 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
   onUpdateStatus,
   onBackToForms,
 }) => {
-  // Event Filter: 'all' or specific form.id
+  // Event Filter: 'overview' (directory), 'all' (combined table), or specific form.id
   const [selectedEventId, setSelectedEventId] = useState<string>(
-    initialSelectedFormId || form?.id || 'all'
+    initialSelectedFormId || (forms.length > 0 ? 'overview' : 'all')
   );
+
+  const [eventSearchTerm, setEventSearchTerm] = useState('');
+  const [desktopNotifEnabled, setDesktopNotifEnabled] = useState(isDesktopNotificationEnabled());
+  const [newlyArrivedSubmission, setNewlyArrivedSubmission] = useState<{
+    formTitle: string;
+    formId: string;
+    applicantName: string;
+    time: string;
+  } | null>(null);
+
+  // Listen for real-time submissions to display active alert banners
+  useEffect(() => {
+    const handleSubCreated = (e: any) => {
+      const sub = e.detail;
+      if (sub) {
+        const matched = forms.find((f) => isSubmissionForForm(sub, f));
+        setNewlyArrivedSubmission({
+          formTitle: matched?.title || 'Event Form',
+          formId: sub.form_id,
+          applicantName: sub.applicant_name || 'Participant',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        });
+      }
+    };
+    window.addEventListener('submission_created', handleSubCreated);
+    return () => window.removeEventListener('submission_created', handleSubCreated);
+  }, [forms]);
 
   // Tab View: Table vs Analytics
   const [viewMode, setViewMode] = useState<'table' | 'analytics'>('table');
@@ -95,16 +133,44 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
 
   const { success, error } = useToast();
 
+  // Compute stats per form for the event directory (Task 26)
+  const formsStats = useMemo(() => {
+    const list = allSubmissions.length > 0 ? allSubmissions : initialSubmissions;
+    return forms.map((f) => {
+      const formSubs = list.filter((s) => isSubmissionForForm(s, f));
+      const sorted = [...formSubs].sort(
+        (a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+      );
+      return {
+        form: f,
+        count: formSubs.length,
+        latestSubmission: sorted[0] || null,
+        latestTimestamp: sorted[0]?.submitted_at || null,
+      };
+    });
+  }, [forms, allSubmissions, initialSubmissions]);
+
+  const filteredEventStats = useMemo(() => {
+    if (!eventSearchTerm.trim()) return formsStats;
+    const query = eventSearchTerm.toLowerCase();
+    return formsStats.filter(
+      (s) =>
+        s.form.title.toLowerCase().includes(query) ||
+        s.form.slug.toLowerCase().includes(query) ||
+        (s.form.status || '').toLowerCase().includes(query)
+    );
+  }, [formsStats, eventSearchTerm]);
+
   // Active form object if filtered to a specific event
   const currentFilteredForm = useMemo(() => {
-    if (selectedEventId === 'all') return null;
+    if (selectedEventId === 'all' || selectedEventId === 'overview') return null;
     return forms.find((f) => f.id === selectedEventId) || form || null;
   }, [selectedEventId, forms, form]);
 
   // Pool of submissions based on selected event filter
   const poolSubmissions = useMemo(() => {
     const list = allSubmissions.length > 0 ? allSubmissions : initialSubmissions;
-    if (selectedEventId === 'all') {
+    if (selectedEventId === 'all' || selectedEventId === 'overview') {
       return list;
     }
     const targetForm = forms.find((f) => f.id === selectedEventId) || form;
@@ -246,7 +312,7 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
   // Handle event dropdown switch
   const handleEventFilterChange = (eventId: string) => {
     setSelectedEventId(eventId);
-    if (onSelectForm && eventId !== 'all') {
+    if (onSelectForm && eventId !== 'all' && eventId !== 'overview') {
       onSelectForm(eventId);
     }
   };
@@ -422,6 +488,265 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
     );
   };
 
+  if (selectedEventId === 'overview') {
+    const totalSubmissions = allSubmissions.length || initialSubmissions.length;
+    const eventsWithSubs = formsStats.filter((s) => s.count > 0).length;
+    const eventsZeroSubs = formsStats.filter((s) => s.count === 0).length;
+
+    return (
+      <div className="space-y-6 animate-fade-in">
+        {/* Top Header Card for Event Directory */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onBackToForms}
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+              >
+                ← Back to All Forms
+              </button>
+              <span className="text-slate-300">•</span>
+              <Badge variant="info" size="sm">
+                RESPONSES HUB
+              </Badge>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-1 tracking-tight">
+              Event Registrations & Responses
+            </h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Select an event below to manage participants, review submissions, and export player lists.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Desktop Notification Toggle (Task 27) */}
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await toggleDesktopNotifications();
+                setDesktopNotifEnabled(res.enabled);
+                if (res.enabled) {
+                  success('Desktop Alerts Active', res.message);
+                } else {
+                  error('Desktop Alerts Off', res.message);
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                desktopNotifEnabled
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 shadow-2xs'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+              title="Desktop notification alerts for incoming submissions"
+            >
+              <BellRing className={`w-3.5 h-3.5 ${desktopNotifEnabled ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span>Desktop Alerts: {desktopNotifEnabled ? 'ON' : 'OFF'}</span>
+            </button>
+
+            {/* View All Combined Responses */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedEventId('all')}
+              leftIcon={<Globe className="w-4 h-4 text-indigo-600" />}
+              className="shadow-2xs font-bold"
+            >
+              View All Responses Combined ({totalSubmissions})
+            </Button>
+          </div>
+        </div>
+
+        {/* Live Submission Alert Banner (Task 26) */}
+        {newlyArrivedSubmission && (
+          <div className="p-4 rounded-2xl bg-indigo-50/90 border border-indigo-200 shadow-xs flex items-center justify-between gap-3 animate-fade-in">
+            <div className="flex items-center gap-2.5 text-xs text-indigo-950">
+              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 animate-bounce" />
+              <div>
+                <span className="font-bold">New Registration: </span>
+                <span>
+                  <strong>{newlyArrivedSubmission.applicantName}</strong> registered for "
+                  {newlyArrivedSubmission.formTitle}" at {newlyArrivedSubmission.time}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedEventId(newlyArrivedSubmission.formId);
+                  onSelectForm?.(newlyArrivedSubmission.formId);
+                  setNewlyArrivedSubmission(null);
+                }}
+                className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-xs cursor-pointer inline-flex items-center gap-1"
+              >
+                <span>Open Responses</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewlyArrivedSubmission(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Overview Stats Bar */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              Total Events
+            </span>
+            <div className="text-2xl font-black text-slate-900 mt-1">{forms.length}</div>
+            <span className="text-[11px] text-slate-500 mt-0.5 block">Configured forms</span>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+            <span className="text-[11px] font-bold text-indigo-500 uppercase tracking-wider">
+              Total Submissions
+            </span>
+            <div className="text-2xl font-black text-indigo-600 mt-1">{totalSubmissions}</div>
+            <span className="text-[11px] text-slate-500 mt-0.5 block">All verified submissions</span>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+            <span className="text-[11px] font-bold text-emerald-500 uppercase tracking-wider">
+              Active Events
+            </span>
+            <div className="text-2xl font-black text-emerald-600 mt-1">{eventsWithSubs}</div>
+            <span className="text-[11px] text-slate-500 mt-0.5 block">With ≥ 1 registration</span>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+            <span className="text-[11px] font-bold text-amber-500 uppercase tracking-wider">
+              Ready for Entries
+            </span>
+            <div className="text-2xl font-black text-amber-600 mt-1">{eventsZeroSubs}</div>
+            <span className="text-[11px] text-slate-500 mt-0.5 block">0 submissions recorded</span>
+          </div>
+        </div>
+
+        {/* Search Bar for Events */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs flex items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search event by name or slug..."
+              value={eventSearchTerm}
+              onChange={(e) => setEventSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-indigo-400 outline-none transition-all"
+            />
+          </div>
+          <span className="text-xs text-slate-400 hidden sm:inline">
+            Showing {filteredEventStats.length} of {forms.length} events
+          </span>
+        </div>
+
+        {/* Grid of Event Cards (Task 26) */}
+        {filteredEventStats.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-12 text-center text-slate-400 space-y-2">
+            <FolderOpen className="w-10 h-10 text-slate-300 mx-auto" />
+            <h3 className="text-base font-bold text-slate-700">No events matched your search</h3>
+            <p className="text-xs text-slate-400">Try clearing the search filter above.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredEventStats.map(({ form: f, count, latestTimestamp }) => (
+              <div
+                key={f.id}
+                className="bg-white rounded-2xl border border-slate-200/90 hover:border-indigo-300 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between group"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                    <Badge
+                      variant={f.status === 'published' ? 'success' : 'neutral'}
+                      size="sm"
+                    >
+                      {(f.status || 'DRAFT').toUpperCase()}
+                    </Badge>
+                    <span className="text-[11px] font-mono text-slate-400 font-semibold">
+                      v{f.published_version || 1}
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">
+                    {f.title}
+                  </h3>
+
+                  <p className="text-xs text-slate-400 font-mono mt-1 truncate">
+                    /e/{f.slug}
+                  </p>
+
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Users className={`w-4 h-4 ${count > 0 ? 'text-indigo-600' : 'text-slate-400'}`} />
+                      <span className="font-extrabold text-slate-900">{count}</span>
+                      <span className="text-slate-500 font-medium">
+                        {count === 1 ? 'submission' : 'submissions'}
+                      </span>
+                    </div>
+
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span>
+                        {latestTimestamp
+                          ? new Date(latestTimestamp).toLocaleDateString([], {
+                              month: 'short',
+                              day: 'numeric',
+                            })
+                          : 'No submissions'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 pt-3 border-t border-slate-100/80 flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="flex-1 font-bold shadow-xs justify-center"
+                    onClick={() => {
+                      setSelectedEventId(f.id);
+                      onSelectForm?.(f.id);
+                    }}
+                  >
+                    Open Responses ({count}) →
+                  </Button>
+
+                  <a
+                    href={`#/e/${f.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 border border-slate-200 rounded-xl text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors"
+                    title="Open live public registration page"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Informational Callout regarding Desktop and Push Notifications (Task 27) */}
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 text-xs text-slate-600 flex items-start gap-3">
+          <Bell className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-bold text-slate-800">
+              Desktop Notifications Architecture & Session Behavior
+            </p>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Standard browser desktop notifications fire automatically whenever a new registration is submitted while your browser window or tab is active.
+              When the browser is completely closed, background operating system notifications require a Web Push service worker integrated with a push notification server.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Top Header Card */}
@@ -429,10 +754,17 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <button
-              onClick={onBackToForms}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+              onClick={() => setSelectedEventId('overview')}
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer inline-flex items-center gap-1"
             >
-              ← Back to All Forms
+              <span>← Back to Events Directory</span>
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              onClick={onBackToForms}
+              className="text-xs font-medium text-slate-500 hover:text-slate-700 cursor-pointer"
+            >
+              Forms List
             </button>
             <span className="text-slate-300">•</span>
             <Badge
@@ -469,9 +801,11 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
               onChange={(e) => handleEventFilterChange(e.target.value)}
               className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer max-w-[200px] truncate"
             >
+              <option value="overview">📁 Events Directory (Overview)</option>
               <option value="all">
-                All Events ({allSubmissions.length || initialSubmissions.length})
+                🌐 All Events Combined ({allSubmissions.length || initialSubmissions.length})
               </option>
+              <option disabled>──────────</option>
               {forms.map((f) => {
                 const count = (allSubmissions || initialSubmissions).filter((s) =>
                   isSubmissionForForm(s, f)
@@ -497,6 +831,45 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* Live Submission Alert Banner (Task 26) */}
+      {newlyArrivedSubmission && (
+        <div className="p-4 rounded-2xl bg-indigo-50/90 border border-indigo-200 shadow-xs flex items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-2.5 text-xs text-indigo-950">
+            <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 animate-bounce" />
+            <div>
+              <span className="font-bold">New Registration: </span>
+              <span>
+                <strong>{newlyArrivedSubmission.applicantName}</strong> registered for "
+                {newlyArrivedSubmission.formTitle}" at {newlyArrivedSubmission.time}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedEventId !== newlyArrivedSubmission.formId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedEventId(newlyArrivedSubmission.formId);
+                  onSelectForm?.(newlyArrivedSubmission.formId);
+                  setNewlyArrivedSubmission(null);
+                }}
+                className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-xs cursor-pointer inline-flex items-center gap-1"
+              >
+                <span>Switch to {newlyArrivedSubmission.formTitle}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setNewlyArrivedSubmission(null)}
+              className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* View Switcher: Table View vs Analytics View */}
       <div className="bg-white rounded-2xl border border-slate-200/90 p-2 shadow-xs flex flex-wrap items-center justify-between gap-3">

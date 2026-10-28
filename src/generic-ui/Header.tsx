@@ -17,6 +17,10 @@ import {
 } from 'lucide-react';
 import { Button } from './components/Button';
 import { Form, Submission } from '../types';
+import {
+  isDesktopNotificationEnabled,
+  toggleDesktopNotifications,
+} from '../utils/desktopNotification';
 
 export interface HeaderProps {
   onToggleMobileSidebar: () => void;
@@ -60,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [desktopEnabled, setDesktopEnabled] = useState(isDesktopNotificationEnabled());
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -220,6 +225,34 @@ export const Header: React.FC<HeaderProps> = ({
                     {recentSubmissions.length} recent
                   </span>
                 </div>
+              </div>
+
+              {/* Desktop Browser Notifications Toggle Bar */}
+              <div className="px-4 py-2 bg-indigo-50/60 border-b border-indigo-100/70 flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-1.5 text-indigo-950 font-medium">
+                  <Bell className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span>Desktop Alerts:</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      desktopEnabled
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {desktopEnabled ? 'Active' : 'Off'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const res = await toggleDesktopNotifications();
+                    setDesktopEnabled(res.enabled);
+                  }}
+                  className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                >
+                  {desktopEnabled ? 'Disable' : 'Turn On'}
+                </button>
               </div>
 
               <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">

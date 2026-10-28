@@ -13,6 +13,7 @@ import { FormBuilderView } from './features/builder/FormBuilderView';
 import { ResponseManagementView } from './features/responses/ResponseManagementView';
 import { PublicRegistrationPage } from './features/public-registration/PublicRegistrationPage';
 import { Loader2, FileQuestion } from 'lucide-react';
+import { sendSubmissionNotification } from './utils/desktopNotification';
 
 function extractSlugFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
@@ -207,6 +208,17 @@ function AppContent() {
           return [newSub, ...prev];
         });
         StorageService.getDashboardStats().then(setStats).catch(() => {});
+
+        // Trigger privacy-safe desktop notification
+        const matchedForm = forms.find((f) => isSubmissionForForm(newSub, f));
+        sendSubmissionNotification({
+          submissionId: newSub.id,
+          formTitle: matchedForm?.title || 'Event Form',
+          formId: newSub.form_id,
+          onClick: () => {
+            navigateToTab('responses', newSub.form_id);
+          },
+        });
       }
     };
 
