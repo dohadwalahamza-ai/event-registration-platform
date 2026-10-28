@@ -12,6 +12,7 @@ import {
   Sparkles,
   Inbox,
   Eye,
+  Clock,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
@@ -168,15 +169,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </Badge>
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
-                      {form.event_date && (
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(form.event_date).toLocaleDateString(undefined, {
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">
+                      <span
+                        className="flex items-center gap-1 text-slate-500 font-medium"
+                        title={`Last updated ${new Date(form.updated_at).toLocaleString()}`}
+                      >
+                        <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>
+                          Updated {new Date(form.updated_at).toLocaleDateString(undefined, {
                             month: 'short',
                             day: 'numeric',
-                          })}
+                            year: 'numeric',
+                          })} at {new Date(form.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
+                      </span>
+                      {form.event_date && (
+                        <>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(form.event_date).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </span>
+                        </>
                       )}
                       <span>•</span>
                       <span>{form.fields?.length || 0} questions</span>
@@ -214,7 +231,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <h3 className="text-base font-bold text-slate-900">Recent Registrations</h3>
               <p className="text-xs text-slate-400">Latest participant signups</p>
             </div>
-            <Inbox className="w-4 h-4 text-slate-400" />
+            <button
+              type="button"
+              onClick={() => onViewResponses('all')}
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 cursor-pointer"
+              title="View all responses in Responses module"
+            >
+              <span>View All Responses</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           <div className="space-y-3">
@@ -259,6 +284,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 );
               })
             )}
+          </div>
+
+          {/* Footer View All link (Task 30) */}
+          <div className="pt-2 border-t border-slate-100 text-center">
+            <button
+              type="button"
+              onClick={() => onViewResponses('all')}
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1.5 cursor-pointer py-1"
+            >
+              <Inbox className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Open Responses Hub ({stats.totalRegistrations} total)</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </div>

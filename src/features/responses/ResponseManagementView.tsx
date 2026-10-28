@@ -1289,6 +1289,7 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
           submissions={poolSubmissions}
           activeFields={activeFields}
           form={currentFilteredForm || form}
+          forms={forms}
         />
       )}
 
