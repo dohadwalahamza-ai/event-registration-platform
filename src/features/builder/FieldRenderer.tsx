@@ -10,7 +10,14 @@ import {
   X,
   ExternalLink,
   Info,
+  Loader2,
 } from 'lucide-react';
+import { StorageService } from '../../services/storage';
+import {
+  MAX_PHOTO_SIZE_BYTES,
+  validatePhotoUpload,
+  compressImage,
+} from '../../utils/imageCompressor';
 
 interface FieldRendererProps {
   field: FormField;
@@ -19,6 +26,7 @@ interface FieldRendererProps {
   error?: string;
   disabled?: boolean;
   accentColor?: string;
+  formId?: string;
 }
 
 export const FieldRenderer: React.FC<FieldRendererProps> = ({
@@ -28,30 +36,71 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   error,
   disabled = false,
   accentColor = '#4f46e5',
+  formId,
 }) => {
   const [photoPreview, setPhotoPreview] = useState<string | null>(
-    typeof value === 'string' && value.startsWith('http') ? value : null
+    typeof value === 'string' && (value.startsWith('http') || value.startsWith('data:image'))
+      ? value
+      : null
   );
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, isPhoto = false) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isPhoto = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadError(null);
+
+    // Enforce 5 MB limit on original uncompressed file
+    if (file.size > MAX_PHOTO_SIZE_BYTES) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      setUploadError(`File is too large (${sizeMB} MB). Maximum allowed size is 5 MB per file.`);
+      e.target.value = '';
+      return;
+    }
+
     if (isPhoto) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        setPhotoPreview(result);
-        onChange?.(result);
-      };
-      reader.readAsDataURL(file);
+      const validation = validatePhotoUpload(file);
+      if (!validation.valid) {
+        setUploadError(validation.error || 'Invalid image file.');
+        e.target.value = '';
+        return;
+      }
+
+      setIsProcessingPhoto(true);
+      try {
+        // Compress client-side to max 1600x1600, 0.82 quality
+        const compressed = await compressImage(file, {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          quality: 0.82,
+        });
+
+        // Upload to storage service (enforces backend 5MB check)
+        const uploadResult = await StorageService.uploadPhoto(
+          compressed.blob,
+          formId || 'general',
+          file.name
+        );
+
+        setPhotoPreview(uploadResult.url);
+        onChange?.(uploadResult.url);
+      } catch (err: any) {
+        console.error('Photo optimization/upload failed:', err);
+        setUploadError(err.message || 'Failed to process photo.');
+      } finally {
+        setIsProcessingPhoto(false);
+        e.target.value = '';
+      }
     } else {
-      // Mock / Local store file name & size
+      // Mock / Local store file name & size for generic files
       onChange?.({
         name: file.name,
         size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
         type: file.type,
       });
+      e.target.value = '';
     }
   };
 
@@ -394,10 +443,20 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           </div>
         )}
 
-        {/* Photo Upload with live preview */}
+        {/* Photo Upload with live preview & compression state */}
         {field.field_type === 'photo_upload' && (
           <div className="space-y-3">
-            {photoPreview ? (
+            {isProcessingPhoto ? (
+              <div className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-2xl animate-pulse">
+                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
+                <span className="text-xs font-bold text-indigo-900">
+                  Compressing & Optimizing Photo...
+                </span>
+                <span className="text-[11px] text-indigo-600 mt-0.5">
+                  Resizing and optimizing for mobile efficiency
+                </span>
+              </div>
+            ) : photoPreview ? (
               <div className="relative inline-block border-2 border-indigo-200 rounded-2xl p-1 bg-white shadow-xs">
                 <img
                   src={photoPreview}
@@ -409,6 +468,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                     type="button"
                     onClick={() => {
                       setPhotoPreview(null);
+                      setUploadError(null);
                       onChange?.(null);
                     }}
                     className="absolute -top-2 -right-2 p-1 bg-rose-600 text-white rounded-full shadow-md hover:bg-rose-700"
@@ -426,12 +486,12 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                     Click or drag photo here
                   </span>
                   <span className="text-[11px] text-slate-400 mt-0.5">
-                    JPG, PNG or WebP up to 5MB
+                    JPG, PNG or WebP (Max 5 MB)
                   </span>
                   <input
                     type="file"
                     accept="image/*"
-                    disabled={disabled}
+                    disabled={disabled || isProcessingPhoto}
                     onChange={(e) => handleFileUpload(e, true)}
                     className="hidden"
                   />
@@ -440,8 +500,10 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const sampleImg = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80';
+                      const sampleImg =
+                        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80';
                       setPhotoPreview(sampleImg);
+                      setUploadError(null);
                       onChange?.(sampleImg);
                     }}
                     className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium hover:underline cursor-pointer"
@@ -449,6 +511,14 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                     + Or use sample player photo
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* Clear error message if file exceeds 5MB or invalid */}
+            {uploadError && (
+              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-shake">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{uploadError}</span>
               </div>
             )}
           </div>

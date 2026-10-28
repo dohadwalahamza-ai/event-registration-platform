@@ -922,6 +922,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                   onChange={(val) => handleFieldChange(field.field_key, val)}
                   error={errors[field.field_key]}
                   accentColor={accentColor}
+                  formId={form.id}
                 />
               </div>
             );

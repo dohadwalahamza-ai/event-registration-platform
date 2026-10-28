@@ -315,18 +315,45 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
         `"${String(phone).replace(/"/g, '""')}"`,
         ...dataFields.map((f) => {
           let val = sub.submission_data ? sub.submission_data[f.field_key] : undefined;
-          if (
-            (f.field_type === 'photo_upload' || f.field_type === 'file_upload') &&
-            (!val || typeof val !== 'string' || !val.startsWith('http'))
-          ) {
-            const photoUrl = getPlayerPhoto(sub);
-            if (photoUrl) val = photoUrl;
+
+          // If photo or file upload field, extract actual URL rather than generic "Photo"
+          if (f.field_type === 'photo_upload' || f.field_type === 'file_upload') {
+            if (!val || val === 'Photo' || val === '[object Object]') {
+              const photoUrl = getPlayerPhoto(sub);
+              if (photoUrl) val = photoUrl;
+            }
           }
+
           if (val === undefined || val === null) return '""';
+
+          // Support multiple photos or files in an array
+          if (Array.isArray(val)) {
+            const urls = val
+              .map((item) => {
+                if (typeof item === 'string') return item;
+                if (item && typeof item === 'object') return item.url || item.path || JSON.stringify(item);
+                return String(item);
+              })
+              // Protect against leaking internal filesystem paths
+              .filter((u) => !u.startsWith('file://') && !u.startsWith('/Users/'));
+            return `"${urls.join(' ; ').replace(/"/g, '""')}"`;
+          }
+
+          // Support object with url property
           if (typeof val === 'object') {
+            if (val.url && typeof val.url === 'string') {
+              return `"${val.url.replace(/"/g, '""')}"`;
+            }
             return `"${JSON.stringify(val).replace(/"/g, '""')}"`;
           }
-          return `"${String(val).replace(/"/g, '""')}"`;
+
+          const strVal = String(val);
+          // Protect against leaking local paths
+          if (strVal.startsWith('file://') || strVal.startsWith('/Users/')) {
+            return '""';
+          }
+
+          return `"${strVal.replace(/"/g, '""')}"`;
         }),
         `"${adminNote.replace(/"/g, '""')}"`,
       ];

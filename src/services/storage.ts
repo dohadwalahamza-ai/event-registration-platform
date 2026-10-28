@@ -1,6 +1,7 @@
 import { Form, FormField, Submission, DashboardStats, FormThemeConfig } from '../types';
 import { SAMPLE_FORMS, INITIAL_SUBMISSIONS } from './seedData';
 import { getSupabaseClient } from './supabaseClient';
+import { MAX_PHOTO_SIZE_BYTES } from '../utils/imageCompressor';
 
 const STORAGE_KEYS = {
   FORMS: 'eventform_forms_v1',
@@ -842,10 +843,24 @@ export class StorageService {
       // ignore
     }
 
-    // 2. Cascade delete in Supabase if connected
+    // 2. Cascade delete associated files and records in Supabase if connected
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        // Clean up Supabase Storage files for this form
+        const cleanFormId = formId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        try {
+          const { data: files, error: listErr } = await supabase.storage
+            .from('event-uploads')
+            .list(cleanFormId);
+          if (!listErr && files && files.length > 0) {
+            const filePaths = files.map((f) => `${cleanFormId}/${f.name}`);
+            await supabase.storage.from('event-uploads').remove(filePaths);
+          }
+        } catch (storageErr) {
+          console.warn('Storage cleanup warning for form files:', storageErr);
+        }
+
         // Must delete child submissions and child fields first to satisfy foreign key constraints!
         await supabase.from('submissions').delete().eq('form_id', formId);
         await supabase.from('form_fields').delete().eq('form_id', formId);
@@ -1213,14 +1228,99 @@ export class StorageService {
     }
   }
 
+  /**
+   * Upload an optimized photo to Supabase storage with 5MB validation
+   */
+  static async uploadPhoto(
+    fileOrBlob: File | Blob,
+    formId: string,
+    originalFileName?: string
+  ): Promise<{ url: string; path: string }> {
+    // 1. Strict backend/service enforcement: original size <= 5 MB
+    if (fileOrBlob.size > MAX_PHOTO_SIZE_BYTES) {
+      const sizeMB = (fileOrBlob.size / (1024 * 1024)).toFixed(1);
+      throw new Error(`Upload rejected: File size (${sizeMB} MB) exceeds maximum allowed limit of 5 MB.`);
+    }
+
+    // 2. Validate MIME type
+    const mime = fileOrBlob.type || 'image/jpeg';
+    if (!mime.startsWith('image/')) {
+      throw new Error('Upload rejected: Invalid file type. Only image files are permitted.');
+    }
+
+    const cleanFormId = (formId || 'general').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const ext = mime.includes('webp') ? 'webp' : mime.includes('png') ? 'png' : 'jpg';
+    const timestamp = Date.now();
+    const rand = Math.random().toString(36).substring(2, 8);
+    const baseName = (originalFileName || 'photo')
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '_');
+    const storagePath = `${cleanFormId}/${timestamp}_${rand}_${baseName}.${ext}`;
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.storage
+          .from('event-uploads')
+          .upload(storagePath, fileOrBlob, {
+            contentType: mime,
+            upsert: true,
+          });
+
+        if (!error && data?.path) {
+          const { data: publicData } = supabase.storage
+            .from('event-uploads')
+            .getPublicUrl(data.path);
+
+          if (publicData?.publicUrl) {
+            return { url: publicData.publicUrl, path: data.path };
+          }
+        }
+      } catch (uploadErr) {
+        console.warn('Supabase storage upload failed, using optimized data URL fallback:', uploadErr);
+      }
+    }
+
+    // Fallback: Convert blob to data URL if Supabase storage is not configured or offline
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read photo blob'));
+      reader.readAsDataURL(fileOrBlob);
+    });
+
+    return { url: dataUrl, path: storagePath };
+  }
+
   static async deleteSubmission(submissionId: string): Promise<void> {
     // 1. Immediately blacklist submission ID
     addDeletedSubmissionId(submissionId);
 
-    // 2. Delete from Supabase
+    // 2. Clean up files and record from Supabase
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        // Find if this submission had files stored in event-uploads
+        const { data: subData } = await supabase
+          .from('submissions')
+          .select('submission_data')
+          .eq('id', submissionId)
+          .single();
+
+        if (subData?.submission_data) {
+          const urls = Object.values(subData.submission_data).filter(
+            (v): v is string => typeof v === 'string' && v.includes('event-uploads/')
+          );
+          for (const u of urls) {
+            const match = u.match(/event-uploads\/(.+)$/);
+            if (match && match[1]) {
+              try {
+                await supabase.storage.from('event-uploads').remove([decodeURIComponent(match[1])]);
+              } catch {}
+            }
+          }
+        }
+
         await supabase.from('submissions').delete().eq('id', submissionId);
       } catch (err) {
         console.warn('Supabase delete submission error', err);
