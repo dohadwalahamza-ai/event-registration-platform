@@ -148,15 +148,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       return {
         success: false,
-        error: 'Invalid administrator credentials. Access restricted to authorized account (admin@admin.com).',
+        error: 'Invalid email or password.',
       };
     }
 
-    // Valid admin credentials (admin@admin.com / admin@123)
+    // Valid admin credentials
     const adminProfile: UserProfile = {
       id: 'admin-primary',
-      email: 'admin@admin.com',
-      name: 'Hamza Dohadwala',
+      email: cleanEmail,
+      name: 'Administrator',
       role: 'admin',
       created_at: new Date().toISOString(),
     };
@@ -191,7 +191,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       return {
         success: false,
-        error: 'Sign up is restricted. Only admin@admin.com is permitted.',
+        error: 'Administrator registration is restricted.',
       };
     }
 

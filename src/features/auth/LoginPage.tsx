@@ -8,7 +8,6 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
-  Sparkles,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 
@@ -19,8 +18,8 @@ interface LoginPageProps {
 export const LoginPage: React.FC<LoginPageProps> = ({
   onSuccess,
 }) => {
-  const [email, setEmail] = useState('admin@admin.com');
-  const [password, setPassword] = useState('admin@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -41,11 +40,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       setErrorMessage(result.error || 'Invalid email or password.');
     }
     setIsLoading(false);
-  };
-
-  const handleQuickDemoAdmin = () => {
-    setEmail('admin@admin.com');
-    setPassword('admin@123');
   };
 
   return (
@@ -140,19 +134,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               Sign In to Dashboard
             </Button>
           </form>
-
-          {/* 1-Click Quick Demo Fill */}
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={handleQuickDemoAdmin}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-              Fill Admin (admin@admin.com)
-            </button>
-            <span className="text-[11px] text-slate-400 font-mono">Pass: admin@123</span>
-          </div>
         </div>
       </div>
     </div>
