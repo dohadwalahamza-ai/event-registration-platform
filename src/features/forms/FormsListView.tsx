@@ -7,6 +7,10 @@ import {
   Edit,
   Eye,
   Inbox,
+  ClipboardCheck,
+  CheckCircle2,
+  FileSpreadsheet,
+  Layers,
   Copy,
   Trash2,
   Globe,
@@ -60,6 +64,15 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [sharingForm, setSharingForm] = useState<Form | null>(null);
   const { success, error } = useToast();
+
+  // Accurate Form Counts derived directly from active database records (Task 14)
+  const formStats = useMemo(() => {
+    const total = forms.length;
+    const published = forms.filter((f) => f.status === 'published').length;
+    const draft = forms.filter((f) => f.status === 'draft').length;
+    const closed = forms.filter((f) => f.status === 'closed').length;
+    return { total, published, draft, closed };
+  }, [forms]);
 
   // Delete confirmation modals state
   const [formToDelete, setFormToDelete] = useState<{ id: string; title: string } | null>(null);
@@ -183,6 +196,85 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
         >
           Create New Form
         </Button>
+      </div>
+
+      {/* KPI Stat Cards: Accurate Form Counts (Task 14) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'all'
+              ? 'bg-indigo-50/60 border-indigo-300 ring-2 ring-indigo-500/20 shadow-xs'
+              : 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs'
+          }`}
+        >
+          <div className="flex items-center justify-between text-indigo-600 mb-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Total Forms</span>
+            <span className="p-1.5 rounded-lg bg-indigo-100/70 text-indigo-700">
+              <FileSpreadsheet className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-900 tracking-tight">{formStats.total}</div>
+          <p className="text-[10px] text-slate-400 mt-0.5">All created forms in database</p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('published')}
+          className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'published'
+              ? 'bg-emerald-50/60 border-emerald-300 ring-2 ring-emerald-500/20 shadow-xs'
+              : 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs'
+          }`}
+        >
+          <div className="flex items-center justify-between text-emerald-600 mb-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Published</span>
+            <span className="p-1.5 rounded-lg bg-emerald-100/70 text-emerald-700">
+              <Globe className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-black text-emerald-700 tracking-tight">{formStats.published}</div>
+          <p className="text-[10px] text-slate-400 mt-0.5">Live accepting submissions</p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('draft')}
+          className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'draft'
+              ? 'bg-amber-50/60 border-amber-300 ring-2 ring-amber-500/20 shadow-xs'
+              : 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs'
+          }`}
+        >
+          <div className="flex items-center justify-between text-amber-600 mb-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Drafts</span>
+            <span className="p-1.5 rounded-lg bg-amber-100/70 text-amber-700">
+              <Clock className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-black text-amber-700 tracking-tight">{formStats.draft}</div>
+          <p className="text-[10px] text-slate-400 mt-0.5">In builder / unpublished</p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('closed')}
+          className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'closed'
+              ? 'bg-slate-100 border-slate-400 ring-2 ring-slate-500/20 shadow-xs'
+              : 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-600 mb-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Closed</span>
+            <span className="p-1.5 rounded-lg bg-slate-200 text-slate-700">
+              <CheckCircle2 className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-black text-slate-800 tracking-tight">{formStats.closed}</div>
+          <p className="text-[10px] text-slate-400 mt-0.5">Registrations closed / expired</p>
+        </button>
       </div>
 
       {/* Search, Filter, Sort Controls */}
@@ -341,9 +433,6 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent" />
 
                   <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-md text-white border border-white/20">
-                      {form.response_limit === 'single' ? 'Single Resp' : 'Multiple Resp'}
-                    </span>
                     <Badge
                       variant={
                         form.status === 'published'
@@ -385,13 +474,14 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                       type="button"
                       onClick={() => onViewResponses(form.id)}
                       className="flex items-center gap-1.5 font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                      title="View Responses"
                     >
-                      <Inbox className="w-3.5 h-3.5" />
+                      <ClipboardCheck className="w-3.5 h-3.5 text-indigo-600" />
                       <span>{count} Submissions</span>
                     </button>
 
-                    <span className="text-[10px] text-slate-400">
-                      Updated {new Date(form.updated_at).toLocaleDateString()}
+                    <span className="text-[10px] text-slate-400" title={`Updated ${new Date(form.updated_at).toLocaleString()}`}>
+                      Updated {new Date(form.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(form.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
 

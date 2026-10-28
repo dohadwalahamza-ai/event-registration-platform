@@ -128,6 +128,7 @@ export interface Submission {
   status: 'confirmed' | 'pending' | 'cancelled';
   applicant_name?: string;
   applicant_email?: string;
+  admin_notes?: string;
 }
 
 export interface UserProfile {

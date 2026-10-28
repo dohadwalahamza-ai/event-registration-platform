@@ -968,13 +968,21 @@ export class StorageService {
     const mergedMap = new Map<string, Submission>();
     for (const s of remoteList) {
       if (!deletedSubmissionIds.has(s.id) && !isDummySubmission(s)) {
-        mergedMap.set(s.id, s);
+        const normS: Submission = {
+          ...s,
+          admin_notes: s.admin_notes || (s.submission_data?._admin_notes as string) || '',
+        };
+        mergedMap.set(s.id, normS);
       }
     }
     for (const s of localList) {
       if (!deletedSubmissionIds.has(s.id) && !isDummySubmission(s)) {
         if (!mergedMap.has(s.id)) {
-          mergedMap.set(s.id, s);
+          const normS: Submission = {
+            ...s,
+            admin_notes: s.admin_notes || (s.submission_data?._admin_notes as string) || '',
+          };
+          mergedMap.set(s.id, normS);
         }
       }
     }
@@ -1157,6 +1165,42 @@ export class StorageService {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('submission_updated', { detail: { id: submissionId, status } })
+      );
+    }
+  }
+
+  static async updateSubmissionNotes(submissionId: string, notes: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        // Update admin_notes column directly
+        await supabase.from('submissions').update({ admin_notes: notes }).eq('id', submissionId);
+      } catch (e) {
+        console.warn('Supabase admin_notes direct update error:', e);
+      }
+    }
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+      if (raw) {
+        const parsed: Submission[] = JSON.parse(raw);
+        const next = parsed.map((s) => {
+          if (s.id === submissionId) {
+            return {
+              ...s,
+              admin_notes: notes,
+              submission_data: { ...(s.submission_data || {}), _admin_notes: notes },
+            };
+          }
+          return s;
+        });
+        localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(next));
+      }
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('submission_updated', { detail: { id: submissionId, admin_notes: notes } })
       );
     }
   }

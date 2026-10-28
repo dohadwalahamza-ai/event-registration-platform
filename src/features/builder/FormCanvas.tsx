@@ -15,8 +15,6 @@ import {
   Clock,
   Sparkles,
   Plus,
-  Users,
-  UserCheck,
 } from 'lucide-react';
 import { Badge } from '../../generic-ui/components/Badge';
 
@@ -190,19 +188,6 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
                 </span>
               </span>
 
-              <span className="flex items-center gap-1.5 font-medium text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200/80">
-                {form.response_limit === 'single' ? (
-                  <>
-                    <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Single Response Only</span>
-                  </>
-                ) : (
-                  <>
-                    <Users className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Multiple Responses Allowed</span>
-                  </>
-                )}
-              </span>
             </div>
           </div>
         </div>

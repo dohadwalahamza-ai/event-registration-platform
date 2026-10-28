@@ -28,6 +28,10 @@ import {
   Shirt,
   AlertCircle,
   TrendingUp,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Edit,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
@@ -76,6 +80,19 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+
+  // Sorting state (A-Z, Z-A, Date, Status, Event, Notes)
+  type SortColumn = 'name' | 'email' | 'date' | 'status' | 'event' | 'notes';
+  type SortDirection = 'asc' | 'desc';
+  const [sortColumn, setSortColumn] = useState<SortColumn>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // Admin notes state
+  const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
+  const [inlineNoteEditingId, setInlineNoteEditingId] = useState<string | null>(null);
+  const [inlineNoteValue, setInlineNoteValue] = useState<string>('');
+
   const { success, error } = useToast();
 
   // Active form object if filtered to a specific event
@@ -102,17 +119,110 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
       const dataString = JSON.stringify(sub.submission_data || {}).toLowerCase();
       const applicant = (sub.applicant_name || '').toLowerCase();
       const email = (sub.applicant_email || '').toLowerCase();
+      const notes = (sub.admin_notes || sub.submission_data?._admin_notes || '').toLowerCase();
       const query = searchTerm.toLowerCase();
 
       const matchesSearch =
         !query ||
         applicant.includes(query) ||
         email.includes(query) ||
+        notes.includes(query) ||
         dataString.includes(query);
 
       return matchesStatus && matchesSearch;
     });
   }, [poolSubmissions, statusFilter, searchTerm]);
+
+  // Sorted submissions based on sortColumn and sortDirection (A-Z / Z-A)
+  const sortedSubmissions = useMemo(() => {
+    return [...filteredSubmissions].sort((a, b) => {
+      let comparison = 0;
+      if (sortColumn === 'date') {
+        const timeA = new Date(a.submitted_at).getTime() || 0;
+        const timeB = new Date(b.submitted_at).getTime() || 0;
+        comparison = timeA - timeB;
+      } else if (sortColumn === 'name') {
+        const nameA = (a.applicant_name || '').trim().toLowerCase();
+        const nameB = (b.applicant_name || '').trim().toLowerCase();
+        if (!nameA && !nameB) comparison = 0;
+        else if (!nameA) comparison = 1;
+        else if (!nameB) comparison = -1;
+        else comparison = nameA.localeCompare(nameB);
+      } else if (sortColumn === 'email') {
+        const emailA = (a.applicant_email || '').trim().toLowerCase();
+        const emailB = (b.applicant_email || '').trim().toLowerCase();
+        if (!emailA && !emailB) comparison = 0;
+        else if (!emailA) comparison = 1;
+        else if (!emailB) comparison = -1;
+        else comparison = emailA.localeCompare(emailB);
+      } else if (sortColumn === 'status') {
+        comparison = (a.status || '').localeCompare(b.status || '');
+      } else if (sortColumn === 'event') {
+        const formA = forms.find((f) => isSubmissionForForm(a, f))?.title || '';
+        const formB = forms.find((f) => isSubmissionForForm(b, f))?.title || '';
+        comparison = formA.localeCompare(formB);
+      } else if (sortColumn === 'notes') {
+        const noteA = (a.admin_notes || a.submission_data?._admin_notes || '').trim().toLowerCase();
+        const noteB = (b.admin_notes || b.submission_data?._admin_notes || '').trim().toLowerCase();
+        if (!noteA && !noteB) comparison = 0;
+        else if (!noteA) comparison = 1;
+        else if (!noteB) comparison = -1;
+        else comparison = noteA.localeCompare(noteB);
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredSubmissions, sortColumn, sortDirection, forms]);
+
+  const handleToggleSort = (col: SortColumn) => {
+    if (sortColumn === col) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(col);
+      setSortDirection(col === 'date' ? 'desc' : 'asc');
+    }
+  };
+
+  const handleSaveNote = async (submissionId: string, customText?: string) => {
+    const textToSave = customText !== undefined ? customText : (editingNotes[submissionId] ?? '');
+    setSavingNoteId(submissionId);
+    try {
+      await StorageService.updateSubmissionNotes(submissionId, textToSave);
+      if (selectedSubmission && selectedSubmission.id === submissionId) {
+        setSelectedSubmission({
+          ...selectedSubmission,
+          admin_notes: textToSave,
+          submission_data: { ...(selectedSubmission.submission_data || {}), _admin_notes: textToSave },
+        });
+      }
+      // Also update local list in place so changes are immediately visible
+      const updateSub = (sub: Submission) =>
+        sub.id === submissionId
+          ? {
+              ...sub,
+              admin_notes: textToSave,
+              submission_data: { ...(sub.submission_data || {}), _admin_notes: textToSave },
+            }
+          : sub;
+      if (allSubmissions) {
+        const idx = allSubmissions.findIndex((s) => s.id === submissionId);
+        if (idx >= 0) allSubmissions[idx] = updateSub(allSubmissions[idx]);
+      }
+      if (initialSubmissions) {
+        const idx = initialSubmissions.findIndex((s) => s.id === submissionId);
+        if (idx >= 0) initialSubmissions[idx] = updateSub(initialSubmissions[idx]);
+      }
+      success('Note Saved', 'Administrative remark updated.');
+    } catch {
+      error('Failed', 'Could not save administrative remark.');
+    } finally {
+      setSavingNoteId(null);
+    }
+  };
+
+  const handleSaveInlineNote = async (submissionId: string) => {
+    await handleSaveNote(submissionId, inlineNoteValue);
+    setInlineNoteEditingId(null);
+  };
 
   // Fields to use for column headers / questions
   const activeFields = useMemo(() => {
@@ -164,9 +274,9 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
     }
   };
 
-  // Export to CSV function
+  // Export to CSV function (Without internal Submission ID, with photo URLs and admin remarks)
   const handleExportCSV = () => {
-    if (filteredSubmissions.length === 0) {
+    if (sortedSubmissions.length === 0) {
       error('No Submissions', 'There are no responses to export for the current filter.');
       return;
     }
@@ -176,7 +286,6 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
     );
 
     const headers = [
-      'Submission ID',
       'Event Name',
       'Submitted At',
       'Status',
@@ -184,9 +293,10 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
       'Email Address',
       'Phone / WhatsApp',
       ...dataFields.map((f) => f.label.replace(/"/g, '""')),
+      'Admin Notes / Remarks',
     ];
 
-    const rows = filteredSubmissions.map((sub) => {
+    const rows = sortedSubmissions.map((sub) => {
       const matchedForm = forms.find((f) => isSubmissionForForm(sub, f));
       const eventTitle = matchedForm?.title || currentFilteredForm?.title || 'Event Registration';
       const phone =
@@ -194,9 +304,9 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
         sub.submission_data?.phone_number ||
         sub.submission_data?.phone ||
         '';
+      const adminNote = sub.admin_notes || (sub.submission_data?._admin_notes as string) || '';
 
       const row = [
-        `"${sub.id}"`,
         `"${eventTitle.replace(/"/g, '""')}"`,
         `"${new Date(sub.submitted_at).toLocaleString()}"`,
         `"${sub.status}"`,
@@ -204,13 +314,21 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
         `"${(sub.applicant_email || '').replace(/"/g, '""')}"`,
         `"${String(phone).replace(/"/g, '""')}"`,
         ...dataFields.map((f) => {
-          const val = sub.submission_data ? sub.submission_data[f.field_key] : undefined;
+          let val = sub.submission_data ? sub.submission_data[f.field_key] : undefined;
+          if (
+            (f.field_type === 'photo_upload' || f.field_type === 'file_upload') &&
+            (!val || typeof val !== 'string' || !val.startsWith('http'))
+          ) {
+            const photoUrl = getPlayerPhoto(sub);
+            if (photoUrl) val = photoUrl;
+          }
           if (val === undefined || val === null) return '""';
           if (typeof val === 'object') {
             return `"${JSON.stringify(val).replace(/"/g, '""')}"`;
           }
           return `"${String(val).replace(/"/g, '""')}"`;
         }),
+        `"${adminNote.replace(/"/g, '""')}"`,
       ];
       return row.join(',');
     });
@@ -340,18 +458,6 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
             </select>
           </div>
 
-          {onRefresh && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onRefresh}
-              isLoading={isRefreshing}
-              leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />}
-            >
-              Refresh DB
-            </Button>
-          )}
-
           {/* Prominent Export CSV Button */}
           <Button
             variant="primary"
@@ -421,12 +527,35 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none"
+                className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none cursor-pointer"
               >
                 <option value="all">All ({poolSubmissions.length})</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="pending">Pending</option>
                 <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            {/* Sort Controls (A-Z, Z-A, Date, Status, Notes) */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <span className="font-semibold text-slate-500">Sort:</span>
+              <select
+                value={`${sortColumn}_${sortDirection}`}
+                onChange={(e) => {
+                  const [col, dir] = e.target.value.split('_');
+                  setSortColumn(col as any);
+                  setSortDirection(dir as any);
+                }}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none cursor-pointer"
+              >
+                <option value="date_desc">Newest First</option>
+                <option value="date_asc">Oldest First</option>
+                <option value="name_asc">Participant Name (A → Z)</option>
+                <option value="name_desc">Participant Name (Z → A)</option>
+                <option value="email_asc">Email (A → Z)</option>
+                <option value="email_desc">Email (Z → A)</option>
+                <option value="status_asc">Status (A → Z)</option>
+                <option value="notes_asc">Admin Notes (A → Z)</option>
               </select>
             </div>
           </div>
@@ -453,25 +582,111 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-600">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10px] tracking-wider">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10px] tracking-wider select-none">
                   <tr>
-                    <th className="py-3.5 px-4">Player / Participant</th>
-                    <th className="py-3.5 px-4">Contact</th>
+                    <th
+                      className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleToggleSort('name')}
+                      title="Sort by Participant Name"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Player / Participant</span>
+                        {sortColumn === 'name' ? (
+                          sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                        )}
+                      </div>
+                    </th>
+
+                    <th
+                      className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleToggleSort('email')}
+                      title="Sort by Contact"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Contact</span>
+                        {sortColumn === 'email' ? (
+                          sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                        )}
+                      </div>
+                    </th>
+
                     {selectedEventId === 'all' && (
-                      <th className="py-3.5 px-4">Event</th>
+                      <th
+                        className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => handleToggleSort('event')}
+                        title="Sort by Event"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Event</span>
+                          {sortColumn === 'event' ? (
+                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
                     )}
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4">Submission Date</th>
+
+                    <th
+                      className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleToggleSort('status')}
+                      title="Sort by Status"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Status</span>
+                        {sortColumn === 'status' ? (
+                          sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                        )}
+                      </div>
+                    </th>
+
+                    <th
+                      className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleToggleSort('date')}
+                      title="Sort by Submission Date"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Submission Date</span>
+                        {sortColumn === 'date' ? (
+                          sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                        )}
+                      </div>
+                    </th>
+
+                    <th
+                      className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleToggleSort('notes')}
+                      title="Sort by Admin Notes"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Admin Notes / Remarks</span>
+                        {sortColumn === 'notes' ? (
+                          sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                        )}
+                      </div>
+                    </th>
+
                     <th className="py-3.5 px-4">Key Details</th>
                     <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredSubmissions.map((sub) => {
+                  {sortedSubmissions.map((sub) => {
                     const data = sub.submission_data || {};
                     const photo = getPlayerPhoto(sub);
                     const phone = getPlayerPhone(sub);
                     const matchedForm = forms.find((f) => isSubmissionForForm(sub, f));
+                    const currentNote = sub.admin_notes || (sub.submission_data?._admin_notes as string) || '';
 
                     return (
                       <tr
@@ -560,6 +775,61 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                           })}
                         </td>
 
+                        {/* Admin Notes Column with inline edit */}
+                        <td className="py-3.5 px-4 max-w-[180px]" onClick={(e) => e.stopPropagation()}>
+                          {inlineNoteEditingId === sub.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                autoFocus
+                                value={inlineNoteValue}
+                                onChange={(e) => setInlineNoteValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveInlineNote(sub.id);
+                                  if (e.key === 'Escape') setInlineNoteEditingId(null);
+                                }}
+                                className="w-full text-xs px-2 py-1 border border-indigo-400 rounded-lg bg-white focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveInlineNote(sub.id)}
+                                className="p-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer"
+                                title="Save note"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setInlineNoteEditingId(null)}
+                                className="p-1 rounded bg-slate-200 text-slate-600 hover:bg-slate-300 cursor-pointer"
+                                title="Cancel"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => {
+                                setInlineNoteEditingId(sub.id);
+                                setInlineNoteValue(currentNote);
+                              }}
+                              className="cursor-pointer group/note flex items-center justify-between gap-1 p-1 -m-1 rounded-lg hover:bg-slate-100 transition-colors"
+                              title="Click to edit admin remarks"
+                            >
+                              <span
+                                className={`text-[11px] truncate block ${
+                                  currentNote
+                                    ? 'text-amber-900 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200/70'
+                                    : 'text-slate-400 italic'
+                                }`}
+                              >
+                                {currentNote || '+ Add remarks'}
+                              </span>
+                              <Edit className="w-3 h-3 text-slate-400 opacity-0 group-hover/note:opacity-100 transition-opacity shrink-0" />
+                            </div>
+                          )}
+                        </td>
+
                         {/* Key Details Snippet */}
                         <td className="py-3.5 px-4 max-w-xs">
                           <div className="truncate text-slate-600 font-mono text-[11px]">
@@ -585,7 +855,7 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => setSelectedSubmission(sub)}
-                              className="px-2.5 py-1 text-indigo-600 hover:text-indigo-800 rounded-lg hover:bg-indigo-50 text-xs font-semibold flex items-center gap-1 transition-colors"
+                              className="px-2.5 py-1 text-indigo-600 hover:text-indigo-800 rounded-lg hover:bg-indigo-50 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                               title="View Full Player Profile"
                             >
                               <Eye className="w-3.5 h-3.5" />
@@ -594,7 +864,7 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                             <button
                               disabled={deletingId === sub.id}
                               onClick={() => handleDelete(sub.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Delete Response"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -793,7 +1063,52 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                   </div>
                 </div>
 
-                {/* 2. FORM QUESTIONS & ANSWERS (Strictly based on what is in this Form) */}
+                {/* 2. ADMIN NOTES & REMARKS (Admin-only, internal record) */}
+                <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-900">
+                      <FileText className="w-4 h-4 text-amber-600" />
+                      <span>Admin Notes & Internal Remarks</span>
+                    </div>
+                    <span className="text-[10px] text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full font-medium border border-amber-200/50">
+                      Internal Only • Never visible to respondents
+                    </span>
+                  </div>
+                  <textarea
+                    rows={2}
+                    placeholder="Add internal verification notes, registration remarks, payment status, team assignment..."
+                    value={
+                      editingNotes[selectedSubmission.id] !== undefined
+                        ? editingNotes[selectedSubmission.id]
+                        : selectedSubmission.admin_notes || (selectedSubmission.submission_data?._admin_notes as string) || ''
+                    }
+                    onChange={(e) =>
+                      setEditingNotes((prev) => ({
+                        ...prev,
+                        [selectedSubmission.id]: e.target.value,
+                      }))
+                    }
+                    className="w-full text-xs p-3 rounded-xl border border-amber-300/80 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 shadow-2xs resize-none"
+                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-amber-700/80">
+                      {selectedSubmission.admin_notes || selectedSubmission.submission_data?._admin_notes
+                        ? 'Remark recorded'
+                        : 'No remarks recorded yet'}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => handleSaveNote(selectedSubmission.id)}
+                      isLoading={savingNoteId === selectedSubmission.id}
+                      className="bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+                    >
+                      Save Remarks
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 3. FORM QUESTIONS & ANSWERS (Strictly based on what is in this Form) */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">

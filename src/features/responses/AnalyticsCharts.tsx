@@ -338,10 +338,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
         </div>
       </div>
 
-      {/* 2. DUAL CHART HERO SECTION: TIMELINE AREA CHART & STATUS DONUT CHART */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Graph A: Registration Timeline Area Chart (7 Cols) */}
-        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs flex flex-col justify-between">
+      {/* 2. REGISTRATION TIMELINE AREA CHART */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs flex flex-col justify-between">
           <div className="flex items-start justify-between border-b border-slate-100 pb-3">
             <div>
               <div className="flex items-center gap-2">
@@ -473,145 +471,7 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
                 </span>
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Graph B: Status Distribution Donut Chart (5 Cols) */}
-        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs flex flex-col justify-between">
-          <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
-                  <PieChart className="w-4 h-4" />
-                </span>
-                <h4 className="text-sm font-bold text-slate-900">Status Distribution</h4>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Confirmed vs Pending vs Cancelled</p>
-            </div>
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-              Donut Chart
-            </span>
-          </div>
-
-          {total === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-xs">
-              No submissions to display in donut chart.
-            </div>
-          ) : (
-            <div className="pt-4 flex flex-col sm:flex-row items-center justify-around gap-6">
-              {/* SVG Donut */}
-              <div className="relative w-36 h-36 shrink-0 flex items-center justify-center">
-                {(() => {
-                  const radius = 50;
-                  const circumference = 2 * Math.PI * radius; // ~314.16
-
-                  const confirmedStroke = (statusCounts.confirmed / total) * circumference;
-                  const pendingStroke = (statusCounts.pending / total) * circumference;
-                  const cancelledStroke = (statusCounts.cancelled / total) * circumference;
-
-                  const confirmedOffset = 0;
-                  const pendingOffset = -confirmedStroke;
-                  const cancelledOffset = -(confirmedStroke + pendingStroke);
-
-                  return (
-                    <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
-                      {/* Background Ring */}
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r={radius}
-                        fill="none"
-                        stroke="#f1f5f9"
-                        strokeWidth="14"
-                      />
-                      {/* Confirmed Slice */}
-                      {statusCounts.confirmed > 0 && (
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r={radius}
-                          fill="none"
-                          stroke="#10b981"
-                          strokeWidth="14"
-                          strokeDasharray={`${confirmedStroke} ${circumference}`}
-                          strokeDashoffset={confirmedOffset}
-                          className="transition-all duration-700"
-                        />
-                      )}
-                      {/* Pending Slice */}
-                      {statusCounts.pending > 0 && (
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r={radius}
-                          fill="none"
-                          stroke="#f59e0b"
-                          strokeWidth="14"
-                          strokeDasharray={`${pendingStroke} ${circumference}`}
-                          strokeDashoffset={pendingOffset}
-                          className="transition-all duration-700"
-                        />
-                      )}
-                      {/* Cancelled Slice */}
-                      {statusCounts.cancelled > 0 && (
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r={radius}
-                          fill="none"
-                          stroke="#f43f5e"
-                          strokeWidth="14"
-                          strokeDasharray={`${cancelledStroke} ${circumference}`}
-                          strokeDashoffset={cancelledOffset}
-                          className="transition-all duration-700"
-                        />
-                      )}
-                    </svg>
-                  );
-                })()}
-
-                {/* Donut Center Label */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-xl font-black text-slate-800">{total}</span>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Total</span>
-                </div>
-              </div>
-
-              {/* Donut Legend */}
-              <div className="space-y-2.5 w-full sm:w-auto">
-                <div className="flex items-center justify-between gap-4 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
-                    <span className="text-slate-600 font-medium">Confirmed</span>
-                  </div>
-                  <span className="font-bold text-slate-900">
-                    {statusCounts.confirmed} ({statusCounts.confirmedPct}%)
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between gap-4 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-amber-500 shrink-0" />
-                    <span className="text-slate-600 font-medium">Pending</span>
-                  </div>
-                  <span className="font-bold text-slate-900">
-                    {statusCounts.pending} ({statusCounts.pendingPct}%)
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between gap-4 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-rose-500 shrink-0" />
-                    <span className="text-slate-600 font-medium">Cancelled</span>
-                  </div>
-                  <span className="font-bold text-slate-900">
-                    {statusCounts.cancelled} ({statusCounts.cancelledPct}%)
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {/* 3. QUESTION-BY-QUESTION ANALYTICS WITH GRAPH STYLE TOGGLES */}

@@ -3,10 +3,8 @@ import {
   LayoutDashboard,
   FileSpreadsheet,
   Inbox,
-  Sparkles,
   CalendarCheck2,
   ChevronRight,
-  ExternalLink,
   X,
   LogOut,
 } from 'lucide-react';
@@ -19,7 +17,7 @@ export interface SidebarProps {
   onSelectTab: (tab: NavigationTab) => void;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
-  totalFormsCount: number;
+  totalFormsCount?: number;
   totalResponsesCount: number;
   onPreviewSampleEvent?: () => void;
   onLogout?: () => void;
@@ -86,7 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'forms' as NavigationTab,
       label: 'All Forms',
       icon: <FileSpreadsheet className="w-4 h-4" />,
-      badge: totalFormsCount > 0 ? totalFormsCount.toString() : null,
+      badge: null,
     },
     {
       id: 'responses' as NavigationTab,
@@ -185,25 +183,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </div>
 
-        {/* Live Public Event Test Box */}
-        {onPreviewSampleEvent && (
-          <div className="p-4 mx-3 mb-4 rounded-xl bg-gradient-to-br from-indigo-950/60 to-slate-900 border border-indigo-900/50">
-            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              Live Participant View
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1 leading-normal">
-              Test how cricket players or attendees view and fill your published form.
-            </p>
-            <button
-              onClick={onPreviewSampleEvent}
-              className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-xs"
-            >
-              <span>Open Public Page</span>
-              <ExternalLink className="w-3 h-3" />
-            </button>
-          </div>
-        )}
 
         {/* Admin User Card & Logout in Sidebar */}
         <div className="p-3 mx-3 mb-3 rounded-2xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-between">

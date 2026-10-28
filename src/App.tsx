@@ -586,7 +586,6 @@ function AppContent() {
       totalFormsCount={forms.length}
       totalResponsesCount={submissions.length}
       isSupabaseConnected={isSupabaseConnected}
-      onPreviewSampleEvent={() => handleOpenPublicUrl(forms[0]?.slug || 'kpcl-season-5')}
       onLogout={handleLogout}
       adminName={user?.name}
       adminEmail={user?.email}
