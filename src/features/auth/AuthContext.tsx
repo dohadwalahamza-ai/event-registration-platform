@@ -8,6 +8,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -110,11 +111,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Verify authorized administrator credentials (supports admin@admin.com with 'secret' or 'admin@123')
+    // Verify authorized administrator credentials (supports custom changed password, 'secret', or 'admin@123')
     const normalizedEmail = cleanEmail === 'admin' ? 'admin@admin.com' : cleanEmail;
+    const savedPassword = typeof window !== 'undefined' ? localStorage.getItem('eventform_admin_password') : null;
     const isAuthorizedAdmin =
       normalizedEmail === 'admin@admin.com' &&
-      (cleanPassword === 'secret' || cleanPassword === 'admin@123' || cleanPassword === 'admin');
+      (Boolean(savedPassword && cleanPassword === savedPassword) ||
+        cleanPassword === 'secret' ||
+        cleanPassword === 'admin@123' ||
+        cleanPassword === 'admin');
 
     if (!isAuthorizedAdmin) {
       // If Supabase is connected, optionally check if this is an authorized Supabase admin
@@ -217,6 +222,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const cleanCurrent = currentPassword.trim();
+    const cleanNew = newPassword.trim();
+
+    if (!cleanNew || cleanNew.length < 4) {
+      return { success: false, error: 'New password must be at least 4 characters long.' };
+    }
+
+    const savedPassword = typeof window !== 'undefined' ? localStorage.getItem('eventform_admin_password') : null;
+    const isValidCurrent = savedPassword
+      ? cleanCurrent === savedPassword
+      : (cleanCurrent === 'secret' || cleanCurrent === 'admin@123' || cleanCurrent === 'admin');
+
+    if (!isValidCurrent) {
+      return { success: false, error: 'Current password is incorrect.' };
+    }
+
+    // Persist new password locally
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('eventform_admin_password', cleanNew);
+    }
+
+    // If Supabase Auth is active, also synchronize remote user password
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.auth.updateUser({ password: cleanNew });
+      } catch (err) {
+        console.warn('Supabase password update note:', err);
+      }
+    }
+
+    return { success: true };
+  };
+
   const logout = async (): Promise<void> => {
     setIsLoading(true);
     const supabase = getSupabaseClient();
@@ -241,6 +284,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         signup,
+        changePassword,
         logout,
       }}
     >

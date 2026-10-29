@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Trash2,
   CheckCheck,
+  KeyRound,
 } from 'lucide-react';
 import { Button } from './components/Button';
 import { Form, Submission } from '../types';
@@ -21,6 +22,7 @@ import {
   isDesktopNotificationEnabled,
   toggleDesktopNotifications,
 } from '../utils/desktopNotification';
+import { ChangePasswordModal } from '../features/auth/ChangePasswordModal';
 
 export interface HeaderProps {
   onToggleMobileSidebar: () => void;
@@ -63,6 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectFormResponses,
 }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [desktopEnabled, setDesktopEnabled] = useState(isDesktopNotificationEnabled());
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -371,6 +374,20 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
 
+              <div className="py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    setIsChangePasswordOpen(true);
+                  }}
+                  className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2.5 text-slate-700 font-medium transition-colors cursor-pointer"
+                >
+                  <KeyRound className="w-4 h-4 text-indigo-600" />
+                  <span>Change Password</span>
+                </button>
+              </div>
+
               <div className="pt-1 border-t border-slate-100">
                 <button
                   onClick={() => {
@@ -387,6 +404,12 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+      />
     </header>
   );
 };
