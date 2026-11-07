@@ -44,8 +44,9 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   const [customBackgroundColor, setCustomBackgroundColor] = useState<string>(
     parseThemeConfig(form.theme_config).customBackgroundColor || '#0f172a'
   );
+  const hasSections = (form.fields || []).some((f) => f.field_type === 'section_heading');
   const [presentationMode, setPresentationMode] = useState<'all_at_once' | 'step_by_step'>(
-    form.presentation_mode || 'all_at_once'
+    form.presentation_mode || (hasSections ? 'step_by_step' : 'all_at_once')
   );
 
   useEffect(() => {
@@ -62,7 +63,12 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       const parsedTheme = parseThemeConfig(form.theme_config);
       setThemeConfig(parsedTheme);
       setCustomBackgroundColor(parsedTheme.customBackgroundColor || '#0f172a');
-      setPresentationMode(form.presentation_mode || parsedTheme.presentationMode || 'all_at_once');
+      const formHasSections = (form.fields || []).some((f) => f.field_type === 'section_heading');
+      setPresentationMode(
+        form.presentation_mode ||
+          parsedTheme.presentationMode ||
+          (formHasSections ? 'step_by_step' : 'all_at_once')
+      );
     }
   }, [isOpen, form]);
 

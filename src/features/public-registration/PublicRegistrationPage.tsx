@@ -9,6 +9,7 @@ import {
   getNextSectionIndex,
   evaluateSectionVisibility,
   validateSectionFields,
+  validateTraversedSections,
 } from '../conditional-logic/evaluator';
 import { StorageService, parseThemeConfig } from '../../services/storage';
 import {
@@ -351,18 +352,17 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
   const isClosed = !isPreview && (form.status === 'closed' || isDeadlinePassed);
 
   // Multi-section presentation configuration
-  const sections = getFormSections(fields);
+  const sections = getFormSections(fields, form.theme_config);
   const hasMultipleSections = sections.length > 1;
   const isStepByStep =
-    (form.presentation_mode === 'step_by_step' ||
-      form.theme_config?.presentationMode === 'step_by_step') &&
-    hasMultipleSections;
+    hasMultipleSections &&
+    form.presentation_mode !== 'all_at_once' &&
+    form.theme_config?.presentationMode !== 'all_at_once';
 
   const activeSectionIndex = Math.min(Math.max(0, currentSectionIndex), sections.length - 1);
   const currentSection = sections[activeSectionIndex] || sections[0];
   const nextTargetIndex = getNextSectionIndex(activeSectionIndex, sections, fields, formValues);
-  const isFinalSection =
-    !isStepByStep || nextTargetIndex <= activeSectionIndex || activeSectionIndex >= sections.length - 1;
+  const isFinalSection = !isStepByStep || nextTargetIndex === -1;
 
   const handleFieldChange = (fieldKey: string, value: any) => {
     setFormValues((prev) => ({
@@ -409,7 +409,11 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
 
     setErrors({});
     const nextIdx = getNextSectionIndex(activeSectionIndex, sections, fields, formValues);
-    if (nextIdx > activeSectionIndex && nextIdx < sections.length) {
+    if (nextIdx === -1) {
+      handleSubmit(e as unknown as React.FormEvent);
+      return;
+    }
+    if (nextIdx >= 0 && nextIdx < sections.length) {
       setSectionHistory((prev) => [...prev, nextIdx]);
       setCurrentSectionIndex(nextIdx);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -439,8 +443,15 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     if (isClosed) return;
     setSubmissionError(null);
 
-    // Validate all visible fields across the entire form
-    const validation = validateFormSubmission(fields, formValues);
+    // Validate fields: in step-by-step mode, only validate traversed sections
+    let validation;
+    if (isStepByStep) {
+      const traversedIndices = new Set([...sectionHistory, activeSectionIndex]);
+      validation = validateTraversedSections(sections, traversedIndices, formValues, fields);
+    } else {
+      validation = validateFormSubmission(fields, formValues);
+    }
+
     if (!validation.isValid) {
       setErrors(validation.errors);
       const errorCount = Object.keys(validation.errors).length;

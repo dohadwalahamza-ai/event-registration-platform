@@ -15,8 +15,11 @@ import {
   Clock,
   Sparkles,
   Plus,
+  Layers,
+  ArrowRight,
 } from 'lucide-react';
 import { Badge } from '../../generic-ui/components/Badge';
+import { getFormSections } from '../conditional-logic/evaluator';
 
 interface FormCanvasProps {
   form: Form;
@@ -41,6 +44,8 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
 }) => {
   const fields = form.fields || [];
   const theme = parseThemeConfig(form.theme_config);
+  const sections = getFormSections(fields, theme);
+  const hasSections = sections.length > 1 || fields.some((f) => f.field_type === 'section_heading');
   const backgroundStyle = theme.backgroundStyle || 'banner_glass';
   const accentColor = theme.accentColor || '#4f46e5';
   const customBackgroundColor = theme.customBackgroundColor || '#0f172a';
@@ -214,104 +219,341 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
           </div>
         )}
 
-        {/* Fields List */}
-        <div className="space-y-4">
-          {fields.map((field, index) => {
-            const isSelected = selectedFieldId === field.id;
-            const hasConditional =
-              Boolean(field.conditional_rules?.rules?.length);
-
-            return (
+        {/* Multi-Section Canvas View vs Flat List */}
+        {hasSections ? (
+          <div className="space-y-6">
+            {sections.map((sec, secIdx) => (
               <div
-                key={field.id}
-                onClick={() => onSelectField(field.id)}
-                className={`group relative bg-white rounded-2xl p-5 sm:p-6 transition-all duration-200 cursor-pointer ${
-                  isSelected
-                    ? 'ring-2 ring-indigo-600 shadow-md border-transparent'
-                    : 'border border-slate-200/90 hover:border-slate-300 shadow-xs'
-                }`}
+                key={sec.id}
+                className="space-y-3.5 p-4 sm:p-5 rounded-3xl bg-slate-100/80 border border-slate-200/90 shadow-2xs"
               >
-                {/* Field Top Meta Bar */}
-                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] text-slate-400 font-bold">
-                      #{index + 1}
-                    </span>
-                    <Badge variant="neutral" size="sm">
-                      {field.field_type.replace('_', ' ')}
-                    </Badge>
-                    {field.required && (
-                      <Badge variant="danger" size="sm">
-                        Required
-                      </Badge>
+                {/* Section Header Card */}
+                <div
+                  onClick={() => {
+                    if (sec.headingField) onSelectField(sec.headingField.id);
+                  }}
+                  className={`p-4 sm:p-5 rounded-2xl bg-white border transition-all cursor-pointer ${
+                    sec.headingField && selectedFieldId === sec.headingField.id
+                      ? 'ring-2 ring-indigo-600 border-transparent shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
+                        <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                        Section {secIdx + 1} of {sections.length}
+                      </span>
+                      {sec.conditional_rules?.rules?.length ? (
+                        <Badge variant="info" size="sm" dot>
+                          <GitFork className="w-3 h-3 mr-1 inline" />
+                          Conditional Branch
+                        </Badge>
+                      ) : null}
+                    </div>
+
+                    {sec.headingField && (
+                      <div
+                        className="flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          onClick={() => {
+                            const idx = fields.findIndex((f) => f.id === sec.headingField!.id);
+                            if (idx > 0) onMoveField(idx, 'up');
+                          }}
+                          disabled={fields.findIndex((f) => f.id === sec.headingField!.id) === 0}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                          title="Move Section Up"
+                        >
+                          <ChevronUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            const idx = fields.findIndex((f) => f.id === sec.headingField!.id);
+                            if (idx < fields.length - 1) onMoveField(idx, 'down');
+                          }}
+                          disabled={
+                            fields.findIndex((f) => f.id === sec.headingField!.id) === fields.length - 1
+                          }
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                          title="Move Section Down"
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onDeleteField(sec.headingField!.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                          title="Delete Section Header"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onSelectField(sec.headingField!.id)}
+                          className={`p-1.5 rounded-lg ${
+                            selectedFieldId === sec.headingField.id
+                              ? 'bg-indigo-600 text-white'
+                              : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                          }`}
+                          title="Configure Section"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
-                    {hasConditional && (
+                  </div>
+
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">{sec.title}</h3>
+                    {sec.description && (
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">{sec.description}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Questions in this Section */}
+                <div className="space-y-3">
+                  {sec.fields.length === 0 ? (
+                    <div className="p-6 text-center bg-white/60 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-400">
+                      No questions in this section yet. Add a question from the palette on the left.
+                    </div>
+                  ) : (
+                    sec.fields.map((field) => {
+                      const index = fields.findIndex((f) => f.id === field.id);
+                      const isSelected = selectedFieldId === field.id;
+                      const hasConditional = Boolean(field.conditional_rules?.rules?.length);
+
+                      return (
+                        <div
+                          key={field.id}
+                          onClick={() => onSelectField(field.id)}
+                          className={`group relative bg-white rounded-2xl p-5 sm:p-6 transition-all duration-200 cursor-pointer ${
+                            isSelected
+                              ? 'ring-2 ring-indigo-600 shadow-md border-transparent'
+                              : 'border border-slate-200/90 hover:border-slate-300 shadow-xs'
+                          }`}
+                        >
+                          {/* Field Top Meta Bar */}
+                          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[10px] text-slate-400 font-bold">
+                                #{index + 1}
+                              </span>
+                              <Badge variant="neutral" size="sm">
+                                {field.field_type.replace('_', ' ')}
+                              </Badge>
+                              {field.required && (
+                                <Badge variant="danger" size="sm">
+                                  Required
+                                </Badge>
+                              )}
+                              {hasConditional && (
+                                <Badge variant="info" size="sm" dot>
+                                  <GitFork className="w-3 h-3 mr-1 inline" />
+                                  Conditional
+                                </Badge>
+                              )}
+                            </div>
+
+                            {/* Actions Toolbar */}
+                            <div
+                              className={`flex items-center gap-1 transition-opacity ${
+                                isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                              }`}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                disabled={index === 0}
+                                onClick={() => onMoveField(index, 'up')}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                                title="Move Up"
+                              >
+                                <ChevronUp className="w-4 h-4" />
+                              </button>
+                              <button
+                                disabled={index === fields.length - 1}
+                                onClick={() => onMoveField(index, 'down')}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                                title="Move Down"
+                              >
+                                <ChevronDown className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => onDuplicateField(field)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                title="Duplicate Question"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => onDeleteField(field.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                title="Delete Question"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => onSelectField(field.id)}
+                                className={`p-1.5 rounded-lg ${
+                                  isSelected
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                                }`}
+                                title="Configure Field"
+                              >
+                                <Settings className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Render Question Field */}
+                          <div className="pointer-events-none select-none opacity-90">
+                            <FieldRenderer field={field} disabled />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Section Navigation & Logic Footer Bar */}
+                <div
+                  onClick={() => {
+                    if (sec.headingField) onSelectField(sec.headingField.id);
+                  }}
+                  className="p-3.5 bg-white border border-slate-200 rounded-2xl flex flex-wrap items-center justify-between gap-3 hover:border-indigo-300 hover:bg-indigo-50/20 transition-all cursor-pointer shadow-2xs group"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+                    <span className="font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                      After Section {secIdx + 1}
+                    </span>
+                    <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                      <ArrowRight className="w-3.5 h-3.5 text-indigo-600" />
+                      {sec.next_section_id === 'submit'
+                        ? 'Submit form'
+                        : sec.next_section_id
+                        ? `Go to ${sections.find((s) => s.id === sec.next_section_id)?.title || 'Selected Section'}`
+                        : secIdx === sections.length - 1
+                        ? 'Submit form (Finish Registration)'
+                        : `Continue to next section (${sections[secIdx + 1]?.title || `Section ${secIdx + 2}`})`}
+                    </span>
+                    {sec.conditional_rules?.rules?.length ? (
                       <Badge variant="info" size="sm" dot>
                         <GitFork className="w-3 h-3 mr-1 inline" />
-                        Conditional
+                        {sec.conditional_rules.rules.length} conditional rule{sec.conditional_rules.rules.length > 1 ? 's' : ''}
                       </Badge>
-                    )}
+                    ) : null}
                   </div>
 
-                  {/* Actions Toolbar */}
-                  <div
-                    className={`flex items-center gap-1 transition-opacity ${
-                      isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                    }`}
-                    onClick={(e) => e.stopPropagation()}
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-indigo-600 group-hover:text-indigo-800 flex items-center gap-1"
                   >
-                    <button
-                      disabled={index === 0}
-                      onClick={() => onMoveField(index, 'up')}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
-                      title="Move Up"
-                    >
-                      <ChevronUp className="w-4 h-4" />
-                    </button>
-                    <button
-                      disabled={index === fields.length - 1}
-                      onClick={() => onMoveField(index, 'down')}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
-                      title="Move Down"
-                    >
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onDuplicateField(field)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                      title="Duplicate Question"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onDeleteField(field.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                      title="Delete Question"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onSelectField(field.id)}
-                      className={`p-1.5 rounded-lg ${
-                        isSelected
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
-                      }`}
-                      title="Configure Field"
-                    >
-                      <Settings className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Render Question Field */}
-                <div className="pointer-events-none select-none opacity-90">
-                  <FieldRenderer field={field} disabled />
+                    <Settings className="w-3.5 h-3.5" />
+                    Configure Next Step
+                  </button>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {fields.map((field, index) => {
+              const isSelected = selectedFieldId === field.id;
+              const hasConditional = Boolean(field.conditional_rules?.rules?.length);
+
+              return (
+                <div
+                  key={field.id}
+                  onClick={() => onSelectField(field.id)}
+                  className={`group relative bg-white rounded-2xl p-5 sm:p-6 transition-all duration-200 cursor-pointer ${
+                    isSelected
+                      ? 'ring-2 ring-indigo-600 shadow-md border-transparent'
+                      : 'border border-slate-200/90 hover:border-slate-300 shadow-xs'
+                  }`}
+                >
+                  {/* Field Top Meta Bar */}
+                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        #{index + 1}
+                      </span>
+                      <Badge variant="neutral" size="sm">
+                        {field.field_type.replace('_', ' ')}
+                      </Badge>
+                      {field.required && (
+                        <Badge variant="danger" size="sm">
+                          Required
+                        </Badge>
+                      )}
+                      {hasConditional && (
+                        <Badge variant="info" size="sm" dot>
+                          <GitFork className="w-3 h-3 mr-1 inline" />
+                          Conditional
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Actions Toolbar */}
+                    <div
+                      className={`flex items-center gap-1 transition-opacity ${
+                        isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      }`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        disabled={index === 0}
+                        onClick={() => onMoveField(index, 'up')}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                        title="Move Up"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        disabled={index === fields.length - 1}
+                        onClick={() => onMoveField(index, 'down')}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                        title="Move Down"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onDuplicateField(field)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                        title="Duplicate Question"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onDeleteField(field.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                        title="Delete Question"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onSelectField(field.id)}
+                        className={`p-1.5 rounded-lg ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white'
+                            : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                        }`}
+                        title="Configure Field"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Render Question Field */}
+                  <div className="pointer-events-none select-none opacity-90">
+                    <FieldRenderer field={field} disabled />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

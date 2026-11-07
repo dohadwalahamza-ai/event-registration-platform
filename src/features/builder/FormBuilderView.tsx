@@ -22,7 +22,9 @@ import {
   AlertTriangle,
   ExternalLink,
   Loader2,
+  Layers,
 } from 'lucide-react';
+import { getFormSections } from '../conditional-logic/evaluator';
 import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
 import { Modal } from '../../generic-ui/components/Modal';
@@ -62,6 +64,8 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
 
   const fields = form.fields || [];
   const selectedField = fields.find((f) => f.id === selectedFieldId) || null;
+  const sections = getFormSections(fields, form.theme_config);
+  const hasSections = sections.length > 1 || fields.some((f) => f.field_type === 'section_heading');
 
   // Refs for autosave, race condition prevention, and debouncing
   const lastSavedJsonRef = React.useRef<string>(JSON.stringify(initialForm));
@@ -172,8 +176,10 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         : undefined,
     };
 
+    const isSection = type === 'section_heading';
     setForm((prev) => ({
       ...prev,
+      presentation_mode: isSection ? 'step_by_step' : (prev.presentation_mode || 'step_by_step'),
       fields: [...(prev.fields || []), newField],
     }));
     setSelectedFieldId(newField.id);
@@ -356,6 +362,37 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             >
               Responses
             </Button>
+          )}
+
+          {/* Multi-Section Presentation Mode Toggle */}
+          {hasSections && (
+            <button
+              type="button"
+              onClick={() => {
+                const nextMode =
+                  form.presentation_mode === 'all_at_once' ? 'step_by_step' : 'all_at_once';
+                setForm((prev) => ({
+                  ...prev,
+                  presentation_mode: nextMode,
+                }));
+                setHasUnsavedChanges(true);
+                success(
+                  'Presentation Mode Changed',
+                  nextMode === 'step_by_step'
+                    ? 'Form will paginate page-by-page with Next & Previous buttons.'
+                    : 'Form will display all sections on a single continuous page.'
+                );
+              }}
+              className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-indigo-600 transition-colors shadow-2xs cursor-pointer"
+              title="Click to toggle between Step-by-Step Pages vs Single Page"
+            >
+              <Layers className="w-3.5 h-3.5 text-indigo-600" />
+              <span>
+                {form.presentation_mode === 'all_at_once'
+                  ? 'Mode: 1 Continuous Page'
+                  : `Mode: ${sections.length} Step Pages`}
+              </span>
+            </button>
           )}
 
           {/* Event Branding & Theme */}

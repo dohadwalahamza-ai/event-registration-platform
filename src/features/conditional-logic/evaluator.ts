@@ -1,4 +1,4 @@
-import { FormField, ConditionalRule, ConditionalRuleGroup, FormSection } from '../../types';
+import { FormField, ConditionalRule, ConditionalRuleGroup, FormSection, FormThemeConfig } from '../../types';
 
 /**
  * Checks a single conditional rule against current form answers
@@ -256,7 +256,7 @@ export function validateFormSubmission(
 /**
  * Split form fields into sections based on 'section_heading' dividers
  */
-export function getFormSections(fields: FormField[]): FormSection[] {
+export function getFormSections(fields: FormField[], themeConfig?: FormThemeConfig): FormSection[] {
   const sections: FormSection[] = [];
   let currentSection: FormSection | null = null;
   let sectionIndex = 1;
@@ -270,6 +270,8 @@ export function getFormSections(fields: FormField[]): FormSection[] {
         title: field.label || `Section ${sectionIndex}`,
         description: field.description,
         fields: [],
+        next_section_id: field.next_section_id || themeConfig?.section_routes?.[field.id]?.next_section_id,
+        conditional_rules: field.conditional_rules || themeConfig?.section_routes?.[field.id]?.conditional_rules,
       };
       sections.push(currentSection);
       sectionIndex++;
@@ -281,6 +283,8 @@ export function getFormSections(fields: FormField[]): FormSection[] {
           title: 'General Information',
           description: undefined,
           fields: [],
+          next_section_id: themeConfig?.section_routes?.['section-initial']?.next_section_id,
+          conditional_rules: themeConfig?.section_routes?.['section-initial']?.conditional_rules,
         };
         sections.push(currentSection);
       }
@@ -313,7 +317,8 @@ export function evaluateSectionVisibility(
 }
 
 /**
- * Determine the next destination section index, evaluating conditional branching rules
+ * Determine the next destination section index, evaluating conditional branching rules.
+ * Returns section index (0 .. sections.length - 1) or -1 to signal immediate Form Submission.
  */
 export function getNextSectionIndex(
   currentSectionIndex: number,
@@ -322,45 +327,25 @@ export function getNextSectionIndex(
   formValues: Record<string, any>
 ): number {
   const currentSection = sections[currentSectionIndex];
-  if (!currentSection) return currentSectionIndex + 1;
+  if (!currentSection) return -1;
 
-  // 1. Check for branching rules configured on fields within this section or on the section heading itself
-  const candidateFields = [
-    ...(currentSection.headingField ? [currentSection.headingField] : []),
-    ...currentSection.fields,
-  ];
-
-  for (const field of candidateFields) {
-    const rulesGroup = field.conditional_rules;
-    if (!rulesGroup) continue;
-
-    // Check individual rule level destination_section_id
-    if (rulesGroup.rules && rulesGroup.rules.length > 0) {
-      for (const rule of rulesGroup.rules) {
-        if (rule.destination_section_id && checkSingleRule(rule, formValues)) {
-          const targetIndex = sections.findIndex((s) => s.id === rule.destination_section_id);
-          if (targetIndex > currentSectionIndex) {
-            return targetIndex;
+  // 1. Option-level routing: Check if any answered choice question in this section has a destination_section_id
+  for (const field of currentSection.fields) {
+    const val = formValues[field.field_key];
+    if (val !== undefined && val !== null && val !== '') {
+      if (field.options && field.options.length > 0) {
+        const selectedOption = field.options.find(
+          (opt) => String(opt.value) === String(val) || opt.label === String(val)
+        );
+        if (selectedOption?.destination_section_id) {
+          if (selectedOption.destination_section_id === 'submit') {
+            return -1;
           }
-        }
-      }
-
-      // Check group level skip_to_section action
-      if (
-        rulesGroup.action === 'skip_to_section' &&
-        rulesGroup.destination_section_id
-      ) {
-        const ruleResults = rulesGroup.rules.map((rule) => checkSingleRule(rule, formValues));
-        const conditionMatches =
-          rulesGroup.logic === 'OR'
-            ? ruleResults.some((res) => res === true)
-            : ruleResults.every((res) => res === true);
-
-        if (conditionMatches) {
-          const targetIndex = sections.findIndex(
-            (s) => s.id === rulesGroup.destination_section_id
-          );
-          if (targetIndex > currentSectionIndex) {
+          if (selectedOption.destination_section_id === 'next_section') {
+            break;
+          }
+          const targetIndex = sections.findIndex((s) => s.id === selectedOption.destination_section_id);
+          if (targetIndex !== -1) {
             return targetIndex;
           }
         }
@@ -368,15 +353,64 @@ export function getNextSectionIndex(
     }
   }
 
-  // 2. Default: advance to the next sequentially visible section
+  // 2. Section-level or Field-level conditional queries (rules configured to jump to section or submit)
+  const candidateRuleGroups: ConditionalRuleGroup[] = [
+    ...(currentSection.conditional_rules ? [currentSection.conditional_rules] : []),
+    ...(currentSection.headingField?.conditional_rules ? [currentSection.headingField.conditional_rules] : []),
+    ...(currentSection.fields.map((f) => f.conditional_rules).filter(Boolean) as ConditionalRuleGroup[]),
+  ];
+
+  for (const rulesGroup of candidateRuleGroups) {
+    if (!rulesGroup || !rulesGroup.rules || rulesGroup.rules.length === 0) continue;
+
+    // Check individual rule level destination_section_id
+    for (const rule of rulesGroup.rules) {
+      if (rule.destination_section_id && checkSingleRule(rule, formValues)) {
+        if (rule.destination_section_id === 'submit') return -1;
+        const targetIndex = sections.findIndex((s) => s.id === rule.destination_section_id);
+        if (targetIndex !== -1) return targetIndex;
+      }
+    }
+
+    // Check group level skip_to_section action
+    if (
+      rulesGroup.action === 'skip_to_section' &&
+      rulesGroup.destination_section_id
+    ) {
+      const ruleResults = rulesGroup.rules.map((rule) => checkSingleRule(rule, formValues));
+      const conditionMatches =
+        rulesGroup.logic === 'OR'
+          ? ruleResults.some((res) => res === true)
+          : ruleResults.every((res) => res === true);
+
+      if (conditionMatches) {
+        if (rulesGroup.destination_section_id === 'submit') return -1;
+        const targetIndex = sections.findIndex(
+          (s) => s.id === rulesGroup.destination_section_id
+        );
+        if (targetIndex !== -1) return targetIndex;
+      }
+    }
+  }
+
+  // 3. Check section default next_section_id
+  const defaultNext =
+    currentSection.next_section_id || currentSection.headingField?.next_section_id;
+  if (defaultNext && defaultNext !== 'next_section') {
+    if (defaultNext === 'submit') return -1;
+    const targetIndex = sections.findIndex((s) => s.id === defaultNext);
+    if (targetIndex !== -1) return targetIndex;
+  }
+
+  // 4. Default: advance to the next sequentially visible section
   for (let idx = currentSectionIndex + 1; idx < sections.length; idx++) {
     if (evaluateSectionVisibility(sections[idx], allFields, formValues)) {
       return idx;
     }
   }
 
-  // If no subsequent visible section, remain on last section
-  return sections.length - 1;
+  // If no subsequent visible section exists, return -1 (Submit)
+  return -1;
 }
 
 /**
@@ -388,5 +422,27 @@ export function validateSectionFields(
   allFields: FormField[]
 ): { isValid: boolean; errors: Record<string, string> } {
   return validateFormSubmission(sectionFields, formValues);
+}
+
+/**
+ * Validates only the fields in traversed sections (plus global fields)
+ * so skipped sections don't block form submission.
+ */
+export function validateTraversedSections(
+  sections: FormSection[],
+  traversedSectionIndices: Set<number>,
+  formValues: Record<string, any>,
+  allFields: FormField[]
+): { isValid: boolean; errors: Record<string, string> } {
+  const fieldsToValidate: FormField[] = [];
+
+  sections.forEach((sec, idx) => {
+    if (traversedSectionIndices.has(idx)) {
+      if (sec.headingField) fieldsToValidate.push(sec.headingField);
+      fieldsToValidate.push(...sec.fields);
+    }
+  });
+
+  return validateFormSubmission(fieldsToValidate, formValues);
 }
 

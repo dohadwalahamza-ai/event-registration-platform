@@ -21,17 +21,20 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
       !['section_heading', 'info_text'].includes(f.field_type)
   );
 
-  const availableSections = allFields
-    .filter(
-      (f) =>
-        f.field_type === 'section_heading' &&
-        f.id !== currentField.id &&
-        f.field_key !== currentField.field_key
-    )
-    .map((f, idx) => ({
-      id: f.id,
-      title: f.label || `Section ${idx + 1}`,
-    }));
+  const availableSections = [
+    ...allFields
+      .filter(
+        (f) =>
+          f.field_type === 'section_heading' &&
+          f.id !== currentField.id &&
+          f.field_key !== currentField.field_key
+      )
+      .map((f, idx) => ({
+        id: f.id,
+        title: f.label || `Section ${idx + 1}`,
+      })),
+    { id: 'submit', title: 'Submit Form (Finish Registration)' },
+  ];
 
   const ruleGroup = currentField.conditional_rules || {
     action: 'show',

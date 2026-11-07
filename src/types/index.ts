@@ -24,6 +24,7 @@ export interface FieldOption {
   id: string;
   label: string;
   value: string;
+  destination_section_id?: string;
 }
 
 export type ConditionalOperator =
@@ -76,6 +77,7 @@ export interface FormField {
   conditional_rules?: ConditionalRuleGroup;
   sort_order: number;
   configuration?: Record<string, any>;
+  next_section_id?: string;
 }
 
 export type FormBackgroundStyle =
@@ -98,6 +100,7 @@ export interface FormThemeConfig {
   fontFamily?: string;
   borderRadius: 'sm' | 'md' | 'lg' | 'xl';
   presentationMode?: 'all_at_once' | 'step_by_step';
+  section_routes?: Record<string, { next_section_id?: string; conditional_rules?: ConditionalRuleGroup }>;
 }
 
 export interface FormSection {
@@ -106,6 +109,8 @@ export interface FormSection {
   title: string;
   description?: string;
   fields: FormField[];
+  next_section_id?: string;
+  conditional_rules?: ConditionalRuleGroup;
 }
 
 export interface Form {
