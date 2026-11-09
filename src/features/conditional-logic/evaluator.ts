@@ -183,16 +183,29 @@ export function sanitizeSubmissionData(
  */
 export function validateFormSubmission(
   fields: FormField[],
-  formValues: Record<string, any>
+  formValues: Record<string, any>,
+  options?: {
+    allFields?: FormField[];
+    excusedFieldKeys?: Set<string>;
+  }
 ): { isValid: boolean; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   const cache = new Map<string, boolean>();
+  const contextFields = options?.allFields && options.allFields.length > 0 ? options.allFields : fields;
+  const excusedKeys = options?.excusedFieldKeys || new Set<string>();
 
   for (const field of fields) {
-    const isVisible = evaluateFieldVisibility(field, fields, formValues, cache);
+    const isVisible = evaluateFieldVisibility(field, contextFields, formValues, cache);
     if (!isVisible) continue; // Hidden fields are NOT required!
 
     const val = formValues[field.field_key];
+
+    // If field is excused from required check (e.g. bypassed by an active empty-branch rule)
+    if (excusedKeys.has(field.field_key)) {
+      if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+        continue;
+      }
+    }
 
     // Required check
     if (field.required) {
@@ -414,14 +427,40 @@ export function getNextSectionIndex(
 }
 
 /**
- * Validate only fields in the current section
+ * Validate only fields in the current section, excusing fields that triggered an intentional empty-branch
  */
 export function validateSectionFields(
   sectionFields: FormField[],
   formValues: Record<string, any>,
-  allFields: FormField[]
+  allFields: FormField[],
+  currentSection?: FormSection,
+  targetNextSectionIndex?: number
 ): { isValid: boolean; errors: Record<string, string> } {
-  return validateFormSubmission(sectionFields, formValues);
+  const excusedFieldKeys = new Set<string>();
+
+  // If section has branching rules where an empty field triggers an active branch
+  if (currentSection) {
+    const candidateRuleGroups = [
+      currentSection.conditional_rules,
+      currentSection.headingField?.conditional_rules,
+      ...currentSection.fields.map((f) => f.conditional_rules),
+    ].filter(Boolean) as ConditionalRuleGroup[];
+
+    for (const group of candidateRuleGroups) {
+      if (!group.rules) continue;
+      for (const rule of group.rules) {
+        // If rule specifies branching to another section when empty, and it is currently empty:
+        if (rule.operator === 'is_empty' && checkSingleRule(rule, formValues)) {
+          excusedFieldKeys.add(rule.sourceFieldKey);
+        }
+      }
+    }
+  }
+
+  return validateFormSubmission(sectionFields, formValues, {
+    allFields,
+    excusedFieldKeys,
+  });
 }
 
 /**
@@ -443,6 +482,6 @@ export function validateTraversedSections(
     }
   });
 
-  return validateFormSubmission(fieldsToValidate, formValues);
+  return validateFormSubmission(fieldsToValidate, formValues, { allFields });
 }
 

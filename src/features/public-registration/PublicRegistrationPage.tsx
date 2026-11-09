@@ -387,11 +387,20 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     e.preventDefault();
     setSubmissionError(null);
 
+    // Determine target next section considering active conditional rules
+    const nextIdx = getNextSectionIndex(activeSectionIndex, sections, fields, formValues);
+
     const currentSectionFields = [
       ...(currentSection.headingField ? [currentSection.headingField] : []),
       ...currentSection.fields,
     ];
-    const validation = validateSectionFields(currentSectionFields, formValues, fields);
+    const validation = validateSectionFields(
+      currentSectionFields,
+      formValues,
+      fields,
+      currentSection,
+      nextIdx
+    );
 
     if (!validation.isValid) {
       setErrors(validation.errors);
@@ -408,7 +417,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     }
 
     setErrors({});
-    const nextIdx = getNextSectionIndex(activeSectionIndex, sections, fields, formValues);
     if (nextIdx === -1) {
       handleSubmit(e as unknown as React.FormEvent);
       return;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { FormField, ConditionalRule, ConditionalRuleGroup, ConditionalOperator } from '../../types';
-import { Plus, Trash2, GitFork, AlertCircle, Sparkles } from 'lucide-react';
+import { Plus, Trash2, GitFork, AlertCircle, Sparkles, ArrowRight } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 
 interface ConditionalRuleEditorProps {
@@ -14,6 +14,8 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
   allFields,
   onChange,
 }) => {
+  const isSectionHeading = currentField.field_type === 'section_heading';
+
   // Only fields that appear BEFORE this field (or are distinct) can be used as sources to prevent circular dependency
   const availableSourceFields = allFields.filter(
     (f) =>
@@ -37,8 +39,8 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
   ];
 
   const ruleGroup = currentField.conditional_rules || {
-    action: 'show',
-    logic: 'AND',
+    action: isSectionHeading ? 'skip_to_section' : 'show',
+    logic: isSectionHeading ? 'OR' : 'AND',
     rules: [],
   };
 
@@ -67,12 +69,14 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
     const newRule: ConditionalRule = {
       id: Math.random().toString(36).substring(2, 9),
       sourceFieldKey: firstAvailable.field_key,
-      operator: 'equals',
-      value: firstAvailable.options?.[0]?.value || '',
+      operator: isSectionHeading ? 'is_not_empty' : 'equals',
+      value: isSectionHeading ? '' : (firstAvailable.options?.[0]?.value || ''),
+      destination_section_id: isSectionHeading ? (availableSections[0]?.id || '') : undefined,
     };
 
     onChange({
       ...ruleGroup,
+      action: isSectionHeading ? 'skip_to_section' : ruleGroup.action,
       rules: [...ruleGroup.rules, newRule],
     });
   };
@@ -171,39 +175,61 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
       ) : (
         <div className="space-y-3.5">
           {/* Main Statement Config */}
-          <div className="flex flex-wrap items-center gap-2 text-xs bg-indigo-50/70 p-3 rounded-xl border border-indigo-100/80">
-            <span className="font-semibold text-indigo-900">Rule:</span>
-            <select
-              value={ruleGroup.action}
-              onChange={(e) => handleActionChange(e.target.value as 'show' | 'hide' | 'skip_to_section')}
-              className="bg-white border border-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="show">SHOW</option>
-              <option value="hide">HIDE</option>
-              {availableSections.length > 0 && (
-                <option value="skip_to_section">JUMP TO SECTION</option>
+          {isSectionHeading ? (
+            <div className="p-3 bg-indigo-50/80 rounded-xl border border-indigo-100 text-xs space-y-1.5">
+              <span className="font-bold text-indigo-950 block">Section Branching Conditions</span>
+              <p className="text-[11px] text-indigo-800 leading-snug">
+                When respondents click "Next", they will be routed to the target section based on whether the conditions below match (e.g. if filled go to Section 2, if not filled go to Section 3).
+              </p>
+              {ruleGroup.rules.length > 1 && (
+                <div className="pt-2 flex items-center gap-2">
+                  <span className="text-indigo-900 font-semibold text-xs">Evaluation:</span>
+                  <select
+                    value={ruleGroup.logic}
+                    onChange={(e) => handleLogicChange(e.target.value as 'AND' | 'OR')}
+                    className="bg-white border border-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="OR">First Matching Rule (OR)</option>
+                    <option value="AND">All Rules Must Match (AND)</option>
+                  </select>
+                </div>
               )}
-            </select>
-            <span className="text-indigo-800">
-              {ruleGroup.action === 'skip_to_section' ? 'when' : 'this field when'}
-            </span>
-            {ruleGroup.rules.length > 1 && (
-              <>
-                <select
-                  value={ruleGroup.logic}
-                  onChange={(e) => handleLogicChange(e.target.value as 'AND' | 'OR')}
-                  className="bg-white border border-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="AND">ALL (AND)</option>
-                  <option value="OR">ANY (OR)</option>
-                </select>
-                <span className="text-indigo-800">of the following match:</span>
-              </>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 text-xs bg-indigo-50/70 p-3 rounded-xl border border-indigo-100/80">
+              <span className="font-semibold text-indigo-900">Rule:</span>
+              <select
+                value={ruleGroup.action}
+                onChange={(e) => handleActionChange(e.target.value as 'show' | 'hide' | 'skip_to_section')}
+                className="bg-white border border-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="show">SHOW</option>
+                <option value="hide">HIDE</option>
+                {availableSections.length > 0 && (
+                  <option value="skip_to_section">JUMP TO SECTION</option>
+                )}
+              </select>
+              <span className="text-indigo-800">
+                {ruleGroup.action === 'skip_to_section' ? 'when' : 'this field when'}
+              </span>
+              {ruleGroup.rules.length > 1 && (
+                <>
+                  <select
+                    value={ruleGroup.logic}
+                    onChange={(e) => handleLogicChange(e.target.value as 'AND' | 'OR')}
+                    className="bg-white border border-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="AND">ALL (AND)</option>
+                    <option value="OR">ANY (OR)</option>
+                  </select>
+                  <span className="text-indigo-800">of the following match:</span>
+                </>
+              )}
+            </div>
+          )}
 
-          {/* Target Destination Section Picker if action is skip_to_section */}
-          {ruleGroup.action === 'skip_to_section' && availableSections.length > 0 && (
+          {/* Target Destination Section Picker if action is skip_to_section and not section heading (for field-level skip) */}
+          {!isSectionHeading && ruleGroup.action === 'skip_to_section' && availableSections.length > 0 && (
             <div className="p-3 bg-indigo-50/90 rounded-xl border border-indigo-200 text-xs space-y-1.5 animate-fade-in">
               <span className="font-bold text-indigo-900 block">Target Destination Section:</span>
               <select
@@ -281,11 +307,11 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
                         }
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 font-medium focus:bg-white"
                       >
+                        <option value="is_not_empty">is filled / has an answer</option>
+                        <option value="is_empty">is empty / not filled</option>
                         <option value="equals">equals</option>
                         <option value="not_equals">does not equal</option>
                         <option value="contains">contains</option>
-                        <option value="is_empty">is empty</option>
-                        <option value="is_not_empty">is not empty</option>
                         <option value="greater_than">greater than</option>
                         <option value="less_than">less than</option>
                       </select>
@@ -331,9 +357,10 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
                     )}
 
                     {availableSections.length > 0 && (
-                      <div className="sm:col-span-3 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1">
-                        <span className="text-[10px] font-semibold text-slate-500 uppercase">
-                          Branch to Section:
+                      <div className="sm:col-span-3 pt-2.5 border-t border-indigo-100 flex flex-wrap items-center justify-between gap-2 bg-indigo-50/50 p-2.5 rounded-xl">
+                        <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                          <ArrowRight className="w-3.5 h-3.5 text-indigo-600" />
+                          Then Branch to:
                         </span>
                         <select
                           value={rule.destination_section_id || ''}
@@ -342,7 +369,7 @@ export const ConditionalRuleEditor: React.FC<ConditionalRuleEditorProps> = ({
                               destination_section_id: e.target.value || undefined,
                             })
                           }
-                          className="bg-slate-50 border border-slate-200 rounded-lg p-1 text-[11px] text-slate-800 font-medium"
+                          className="bg-white border border-indigo-300 font-bold text-indigo-950 p-1.5 rounded-lg text-xs shadow-2xs focus:ring-2 focus:ring-indigo-500"
                         >
                           <option value="">Default Next Section</option>
                           {availableSections.map((sec) => (
