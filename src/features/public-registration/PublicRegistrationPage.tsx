@@ -25,6 +25,7 @@ import {
   RotateCcw,
   Sparkles,
   UserCheck,
+  Layers,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
 import confetti from 'canvas-confetti';
@@ -891,32 +892,227 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         </div>
 
         {/* Multi-Section Step Progress Indicator (Visible in Mode B — Step-by-step) */}
-        {isStepByStep && hasMultipleSections && (
-          <div className={`rounded-2xl p-4 sm:p-5 border shadow-sm space-y-2.5 animate-fade-in ${atmosphere.cardClass}`}>
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-indigo-600 uppercase tracking-wider">
-                Section {activeSectionIndex + 1} of {sections.length}
-              </span>
-              <span className={`font-semibold truncate max-w-xs ${atmosphere.headingClass}`}>
-                {currentSection.title}
-              </span>
-            </div>
-            <div className="w-full bg-slate-200/80 dark:bg-white/10 rounded-full h-2 overflow-hidden">
+        {isStepByStep && hasMultipleSections && (() => {
+          const currentVisibleFields = currentSection.fields.filter(
+            (f) => evaluateFieldVisibility(f, fields, formValues)
+          );
+          const currentFieldCount = currentVisibleFields.length;
+
+          const nextSection =
+            nextTargetIndex >= 0 && nextTargetIndex < sections.length
+              ? sections[nextTargetIndex]
+              : null;
+          const nextVisibleFields = nextSection
+            ? nextSection.fields.filter((f) => evaluateFieldVisibility(f, fields, formValues))
+            : [];
+          const nextFieldCount = nextSection ? (nextVisibleFields.length || nextSection.fields.length) : 0;
+
+          return (
+            <div className={`rounded-3xl p-5 sm:p-6 border shadow-sm space-y-4 animate-fade-in ${atmosphere.cardClass}`}>
+              {/* Top Row: Section Badge, Name & Count + Next / Previous Section Buttons */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border shadow-2xs"
+                      style={{
+                        color: accentColor,
+                        backgroundColor: `${accentColor}18`,
+                        borderColor: `${accentColor}35`,
+                      }}
+                    >
+                      <Layers className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                      Section {activeSectionIndex + 1} of {sections.length}
+                    </span>
+                    <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 ${atmosphere.descClass}`}>
+                      {currentFieldCount} {currentFieldCount === 1 ? 'question' : 'questions'}
+                    </span>
+                  </div>
+                  <h2 className={`text-lg sm:text-xl font-bold ${atmosphere.headingClass}`}>
+                    {currentSection.title}
+                  </h2>
+                </div>
+
+                {/* Top Section Navigation Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {activeSectionIndex > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handlePrevSection}
+                      leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}
+                    >
+                      Previous
+                    </Button>
+                  )}
+
+                  {!isFinalSection ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="primary"
+                      onClick={handleNextSection}
+                      rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+                      style={{ backgroundColor: accentColor }}
+                    >
+                      Next Section
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="primary"
+                      onClick={handleSubmit}
+                      rightIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                      style={{ backgroundColor: accentColor }}
+                    >
+                      Submit Registration
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Description if present */}
+              {currentSection.description && (
+                <p className={`text-xs sm:text-sm leading-relaxed ${atmosphere.descClass}`}>
+                  {currentSection.description}
+                </p>
+              )}
+
+              {/* Progress Bar & Percentage */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className={atmosphere.descClass}>
+                    Progress: {Math.round(((activeSectionIndex + 1) / sections.length) * 100)}%
+                  </span>
+                  <span className={atmosphere.descClass}>
+                    Step {activeSectionIndex + 1} of {sections.length}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200/80 dark:bg-white/10 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500 ease-out"
+                    style={{
+                      width: `${Math.round(((activeSectionIndex + 1) / sections.length) * 100)}%`,
+                      backgroundColor: accentColor,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Next Section Information Banner / Teaser */}
               <div
-                className="h-full rounded-full transition-all duration-500 ease-out"
+                className="p-3 sm:p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all text-xs"
                 style={{
-                  width: `${Math.round(((activeSectionIndex + 1) / sections.length) * 100)}%`,
-                  backgroundColor: accentColor,
+                  backgroundColor: `${accentColor}0c`,
+                  borderColor: `${accentColor}30`,
                 }}
-              />
+              >
+                {!isFinalSection && nextSection ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-bold shrink-0" style={{ color: accentColor }}>
+                      Next Section:
+                    </span>
+                    <span className={`font-semibold ${atmosphere.headingClass}`}>
+                      Section {nextTargetIndex + 1} of {sections.length} — {nextSection.title}
+                    </span>
+                    <span className="text-[11px] font-medium opacity-80 shrink-0">
+                      ({nextFieldCount} {nextFieldCount === 1 ? 'question' : 'questions'})
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: accentColor }} />
+                    <span className={`font-semibold ${atmosphere.headingClass}`}>
+                      Final Section — Review your responses and click Submit to complete registration.
+                    </span>
+                  </div>
+                )}
+
+                {!isFinalSection && (
+                  <button
+                    type="button"
+                    onClick={handleNextSection}
+                    className="inline-flex items-center gap-1.5 font-bold hover:underline cursor-pointer shrink-0 ml-auto sm:ml-0"
+                    style={{ color: accentColor }}
+                  >
+                    <span>Proceed to Next Section</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* All Sections Step Breadcrumbs */}
+              <div className="pt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 dark:border-white/10">
+                {sections.map((sec, idx) => {
+                  const isCurrent = idx === activeSectionIndex;
+                  const isCompleted = idx < activeSectionIndex;
+                  const secVisibleCount = sec.fields.filter((f) => evaluateFieldVisibility(f, fields, formValues)).length;
+
+                  return (
+                    <button
+                      key={sec.id}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (isCompleted) {
+                          setCurrentSectionIndex(idx);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }
+                      }}
+                      disabled={!isCompleted && !isCurrent}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs transition-all ${
+                        isCurrent
+                          ? 'font-bold shadow-xs cursor-default'
+                          : isCompleted
+                          ? 'font-medium cursor-pointer hover:bg-slate-200/50 dark:hover:bg-white/10 opacity-90'
+                          : 'font-normal opacity-50 cursor-not-allowed'
+                      }`}
+                      style={
+                        isCurrent
+                          ? {
+                              backgroundColor: `${accentColor}18`,
+                              color: accentColor,
+                              border: `1.5px solid ${accentColor}`,
+                            }
+                          : isCompleted
+                          ? {
+                              backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                              border: '1px solid rgba(0, 0, 0, 0.1)',
+                            }
+                          : {
+                              backgroundColor: 'transparent',
+                              border: '1px dashed rgba(150, 150, 150, 0.3)',
+                            }
+                      }
+                      title={isCompleted ? `Click to jump back to ${sec.title}` : undefined}
+                    >
+                      <span
+                        className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                          isCurrent
+                            ? 'text-white'
+                            : isCompleted
+                            ? 'bg-slate-300 dark:bg-white/20 text-slate-700 dark:text-white'
+                            : 'bg-slate-200 dark:bg-white/10 text-slate-500'
+                        }`}
+                        style={isCurrent ? { backgroundColor: accentColor } : {}}
+                      >
+                        {isCompleted ? '✓' : idx + 1}
+                      </span>
+                      <span className="truncate max-w-[120px] sm:max-w-[160px]">
+                        {sec.title}
+                      </span>
+                      <span className="text-[10px] opacity-70">
+                        ({secVisibleCount})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            {currentSection.description && (
-              <p className={`text-xs mt-1 ${atmosphere.descClass}`}>
-                {currentSection.description}
-              </p>
-            )}
-          </div>
-        )}
+          );
+        })()}
 
         {/* Dynamic Form Questions Container */}
         <form onSubmit={handleSubmit} className="space-y-4">
