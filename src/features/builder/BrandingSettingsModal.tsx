@@ -49,16 +49,22 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
     form.presentation_mode || (hasSections ? 'step_by_step' : 'all_at_once')
   );
 
+  const prevIsOpenRef = React.useRef(false);
+  const prevFormIdRef = React.useRef(form.id);
+
   useEffect(() => {
-    if (isOpen) {
-      setTitle(form.title);
-      setDescription(form.description);
+    const isOpening = isOpen && !prevIsOpenRef.current;
+    const isDifferentForm = form.id !== prevFormIdRef.current;
+
+    if (isOpen && (isOpening || isDifferentForm)) {
+      setTitle(form.title || '');
+      setDescription(form.description || '');
       setCoverImageUrl(form.cover_image_url || '');
       setEventDate(form.event_date || '');
       setEventEndDate(form.event_end_date || '');
       setVenue(form.venue || '');
       setDeadline(form.registration_deadline || '');
-      setSuccessMessage(form.success_message);
+      setSuccessMessage(form.success_message || '');
       setRedirectUrl(form.redirect_url || '');
       const parsedTheme = parseThemeConfig(form.theme_config);
       setThemeConfig(parsedTheme);
@@ -70,6 +76,9 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
           (formHasSections ? 'step_by_step' : 'all_at_once')
       );
     }
+
+    prevIsOpenRef.current = isOpen;
+    prevFormIdRef.current = form.id;
   }, [isOpen, form]);
 
   const colorPresets = [
@@ -190,6 +199,14 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   };
 
   const handleApply = () => {
+    const parsedCurrentTheme = parseThemeConfig(form.theme_config);
+    const updatedTheme: FormThemeConfig = {
+      ...parsedCurrentTheme,
+      ...themeConfig,
+      customBackgroundColor,
+      presentationMode,
+    };
+
     onSave({
       ...form,
       title,
@@ -204,11 +221,7 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       redirect_url: redirectUrl,
       response_limit: form.response_limit || 'multiple',
       presentation_mode: presentationMode,
-      theme_config: {
-        ...themeConfig,
-        customBackgroundColor,
-        presentationMode,
-      },
+      theme_config: updatedTheme,
     });
     onClose();
   };
@@ -406,12 +419,15 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
 
         {/* Theme Accent Color */}
         <div>
-          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
-            Brand Accent Color
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
+              Brand Accent Color
+            </label>
+            <span className="text-[11px] text-slate-500">Buttons, progress bars, and active accents</span>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {colorPresets.map((c) => {
-              const isSelected = themeConfig.accentColor === c.value;
+              const isSelected = (themeConfig.accentColor || '#4f46e5').toLowerCase() === c.value.toLowerCase();
               return (
                 <button
                   key={c.value}
@@ -433,6 +449,25 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
                 </button>
               );
             })}
+
+            {/* Custom Accent Color Picker */}
+            <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 border border-slate-200 rounded-xl">
+              <span className="text-[11px] text-slate-500 font-medium">Custom:</span>
+              <input
+                type="color"
+                value={themeConfig.accentColor || '#4f46e5'}
+                onChange={(e) => setThemeConfig({ ...themeConfig, accentColor: e.target.value })}
+                className="w-6 h-6 rounded-lg border border-slate-300 cursor-pointer p-0.5 bg-white shrink-0"
+                title="Pick custom accent color"
+              />
+              <input
+                type="text"
+                value={themeConfig.accentColor || '#4f46e5'}
+                onChange={(e) => setThemeConfig({ ...themeConfig, accentColor: e.target.value })}
+                placeholder="#4f46e5"
+                className="w-20 px-1.5 py-0.5 bg-white border border-slate-200 rounded text-xs font-mono text-slate-800"
+              />
+            </div>
           </div>
         </div>
 
@@ -504,13 +539,19 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
                   <input
                     type="color"
                     value={customBackgroundColor}
-                    onChange={(e) => setCustomBackgroundColor(e.target.value)}
+                    onChange={(e) => {
+                      setCustomBackgroundColor(e.target.value);
+                      setThemeConfig((prev) => ({ ...prev, customBackgroundColor: e.target.value }));
+                    }}
                     className="w-7 h-7 rounded-lg border border-slate-300 cursor-pointer p-0.5 bg-white"
                   />
                   <input
                     type="text"
                     value={customBackgroundColor}
-                    onChange={(e) => setCustomBackgroundColor(e.target.value)}
+                    onChange={(e) => {
+                      setCustomBackgroundColor(e.target.value);
+                      setThemeConfig((prev) => ({ ...prev, customBackgroundColor: e.target.value }));
+                    }}
                     placeholder="#0f172a"
                     className="w-20 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
                   />
@@ -524,7 +565,10 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
                     <button
                       key={sc.value}
                       type="button"
-                      onClick={() => setCustomBackgroundColor(sc.value)}
+                      onClick={() => {
+                        setCustomBackgroundColor(sc.value);
+                        setThemeConfig((prev) => ({ ...prev, customBackgroundColor: sc.value }));
+                      }}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all ${
                         isScSelected ? 'border-indigo-600 ring-2 ring-indigo-500/30 bg-white' : 'border-slate-200 bg-white hover:border-slate-300'
                       }`}

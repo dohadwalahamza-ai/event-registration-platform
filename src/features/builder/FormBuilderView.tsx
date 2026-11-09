@@ -152,6 +152,14 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  // Synchronize state when initialForm updates externally
+  React.useEffect(() => {
+    setForm(initialForm);
+    latestFormRef.current = initialForm;
+    lastSavedJsonRef.current = JSON.stringify(initialForm);
+    setHasUnsavedChanges(false);
+  }, [initialForm.id, initialForm.updated_at]);
+
   // Add field from palette
   const handleAddField = (type: FormFieldType) => {
     const def = FIELD_DEFINITIONS.find((d) => d.type === type);
@@ -411,9 +419,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             variant="outline"
             onClick={async () => {
               if (hasUnsavedChanges || !isDraftSaved) {
-                await onSaveForm(form);
-                setIsDraftSaved(true);
-                setHasUnsavedChanges(false);
+                await executePersist(latestFormRef.current, true);
               }
               window.open(`/e/${form.slug}`, '_blank');
             }}
@@ -615,10 +621,13 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         onClose={() => setIsBrandingOpen(false)}
         form={form}
         onSave={async (updated) => {
+          if (autosaveTimeoutRef.current) {
+            clearTimeout(autosaveTimeoutRef.current);
+          }
+          latestFormRef.current = updated;
+          lastSavedJsonRef.current = JSON.stringify(updated);
           setForm(updated);
-          await onSaveForm(updated);
-          setIsDraftSaved(true);
-          setHasUnsavedChanges(false);
+          await executePersist(updated, true);
           success('Settings Saved', 'Event details, branding, and theme background have been saved.');
         }}
       />
@@ -632,9 +641,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         onUpdateStatus={handleUpdateStatus}
         onOpenLivePreview={async () => {
           if (hasUnsavedChanges || !isDraftSaved) {
-            await onSaveForm(form);
-            setIsDraftSaved(true);
-            setHasUnsavedChanges(false);
+            await executePersist(latestFormRef.current, true);
           }
           onOpenLivePublicPage(form.slug, form);
         }}

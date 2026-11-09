@@ -240,8 +240,15 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
                 >
                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
                     <div className="flex items-center gap-2">
-                      <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
-                        <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                      <span
+                        className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border shadow-2xs"
+                        style={{
+                          color: accentColor,
+                          backgroundColor: `${accentColor}15`,
+                          borderColor: `${accentColor}30`,
+                        }}
+                      >
+                        <Layers className="w-3.5 h-3.5" style={{ color: accentColor }} />
                         Section {secIdx + 1} of {sections.length}
                       </span>
                       {sec.conditional_rules?.rules?.length ? (
@@ -408,7 +415,7 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
 
                           {/* Render Question Field */}
                           <div className="pointer-events-none select-none opacity-90">
-                            <FieldRenderer field={field} disabled />
+                            <FieldRenderer field={field} disabled accentColor={accentColor} />
                           </div>
                         </div>
                       );
@@ -424,11 +431,18 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
                   className="p-3.5 bg-white border border-slate-200 rounded-2xl flex flex-wrap items-center justify-between gap-3 hover:border-indigo-300 hover:bg-indigo-50/20 transition-all cursor-pointer shadow-2xs group"
                 >
                   <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
-                    <span className="font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                    <span
+                      className="font-bold px-2.5 py-1 rounded-lg border text-xs"
+                      style={{
+                        color: accentColor,
+                        backgroundColor: `${accentColor}15`,
+                        borderColor: `${accentColor}30`,
+                      }}
+                    >
                       After Section {secIdx + 1}
                     </span>
                     <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-                      <ArrowRight className="w-3.5 h-3.5 text-indigo-600" />
+                      <ArrowRight className="w-3.5 h-3.5" style={{ color: accentColor }} />
                       {sec.next_section_id === 'submit'
                         ? 'Submit form'
                         : sec.next_section_id
@@ -547,7 +561,7 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
 
                   {/* Render Question Field */}
                   <div className="pointer-events-none select-none opacity-90">
-                    <FieldRenderer field={field} disabled />
+                    <FieldRenderer field={field} disabled accentColor={accentColor} />
                   </div>
                 </div>
               );

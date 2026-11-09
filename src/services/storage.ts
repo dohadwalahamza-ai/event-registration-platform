@@ -132,6 +132,7 @@ export function parseThemeConfig(raw: any): FormThemeConfig {
   }
   if (val && typeof val === 'object') {
     return {
+      ...val,
       accentColor: val.accentColor || '#4f46e5',
       headerStyle: val.headerStyle || 'banner',
       themeMode: val.themeMode || 'light',
@@ -139,6 +140,7 @@ export function parseThemeConfig(raw: any): FormThemeConfig {
       borderRadius: val.borderRadius || 'xl',
       customBackgroundColor: val.customBackgroundColor || '#0f172a',
       presentationMode: val.presentationMode || 'all_at_once',
+      section_routes: val.section_routes,
     };
   }
   return {
@@ -480,6 +482,34 @@ export class StorageService {
       }
     }
 
+    // Pre-read locally cached forms to compare recency against remote Supabase data
+    let localForms: Form[] = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          localForms = parsed.map((f: Form) => ({
+            ...f,
+            theme_config: parseThemeConfig(f.theme_config),
+          }));
+        }
+      }
+    } catch {}
+
+    const localFound = localForms.find(
+      (f) =>
+        !deletedIds.has(f.id) &&
+        f.title !== 'Event Registration Form' &&
+        (f.slug.toLowerCase() === cleanSlug ||
+          f.id.toLowerCase() === cleanSlug ||
+          f.slug.toLowerCase() === `event-form-${coreSlug}` ||
+          f.slug.toLowerCase() === `form-${coreSlug}` ||
+          f.id.toLowerCase() === `form-${coreSlug}` ||
+          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
+          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
+    );
+
     // 1. ALWAYS query Supabase remote database FIRST if connected
     // This guarantees that mobile browsers and external respondents get the fresh live version
     const supabase = getSupabaseClient();
@@ -570,13 +600,24 @@ export class StorageService {
             fields = fieldsData;
           }
 
+          const parsedSupaTheme = parseThemeConfig(formData.theme_config);
           const supaForm: Form = {
             ...formData,
-            theme_config: parseThemeConfig(formData.theme_config),
+            theme_config: parsedSupaTheme,
+            presentation_mode: formData.presentation_mode || parsedSupaTheme.presentationMode || 'all_at_once',
             fields: fields.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)),
           };
 
-          // Synchronize fresh remote version into local storage
+          // If local cache has a newer version than remote Supabase, prefer local user changes
+          if (localFound) {
+            const localTime = new Date(localFound.updated_at || 0).getTime();
+            const supaTime = new Date(supaForm.updated_at || 0).getTime();
+            if (localTime >= supaTime) {
+              return localFound;
+            }
+          }
+
+          // Otherwise synchronize fresh remote version into local storage
           this.updateLocalFormCache(supaForm);
           return supaForm;
         }
@@ -585,7 +626,10 @@ export class StorageService {
       }
     }
 
-    // 2. Query pre-seeded forms (guarantees official forms like Owner Registration KCL Season 4 load instantly on any mobile device)
+    // 2. Query locally cached forms if Supabase is offline or didn't return a newer match
+    if (localFound) return localFound;
+
+    // 3. Query pre-seeded forms only if not found in local user cache
     const seedFound = SAMPLE_FORMS.find(
       (f) =>
         !deletedIds.has(f.id) &&
@@ -598,36 +642,6 @@ export class StorageService {
       this.updateLocalFormCache(seedFound);
       return seedFound;
     }
-
-    // 3. Query locally cached forms if Supabase is offline or not configured
-    let localForms: Form[] = [];
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          localForms = parsed.map((f: Form) => ({
-            ...f,
-            theme_config: parseThemeConfig(f.theme_config),
-          }));
-        }
-      }
-    } catch {}
-
-    const localFound = localForms.find(
-      (f) =>
-        !deletedIds.has(f.id) &&
-        f.title !== 'Event Registration Form' &&
-        (f.slug.toLowerCase() === cleanSlug ||
-          f.id.toLowerCase() === cleanSlug ||
-          f.slug.toLowerCase() === `event-form-${coreSlug}` ||
-          f.slug.toLowerCase() === `form-${coreSlug}` ||
-          f.id.toLowerCase() === `form-${coreSlug}` ||
-          f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
-          f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
-    );
-
-    if (localFound) return localFound;
 
     // 4. Fallback: Query all merged forms
     try {
@@ -781,15 +795,25 @@ export class StorageService {
    * Save or update a form with its fields
    */
   static async saveForm(form: Form): Promise<Form> {
-    const updatedForm = {
+    const parsedTheme = parseThemeConfig(form.theme_config);
+    const resolvedPresentationMode =
+      form.presentation_mode || parsedTheme.presentationMode || 'all_at_once';
+    const normalizedThemeConfig: FormThemeConfig = {
+      ...parsedTheme,
+      presentationMode: resolvedPresentationMode,
+    };
+
+    const updatedForm: Form = {
       ...form,
+      presentation_mode: resolvedPresentationMode,
+      theme_config: normalizedThemeConfig,
       updated_at: new Date().toISOString(),
     };
 
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        const formPayload = {
+        const formPayload: Record<string, any> = {
           id: updatedForm.id,
           owner_id: updatedForm.owner_id || 'admin',
           title: updatedForm.title || 'Untitled Event Form',
@@ -801,11 +825,7 @@ export class StorageService {
           venue: updatedForm.venue?.trim() || null,
           status: updatedForm.status || 'published',
           registration_deadline: sanitizeTimestamp(updatedForm.registration_deadline),
-          theme_config: {
-            ...updatedForm.theme_config,
-            presentationMode: updatedForm.presentation_mode || 'all_at_once',
-          },
-          presentation_mode: updatedForm.presentation_mode || 'all_at_once',
+          theme_config: normalizedThemeConfig,
           success_message: updatedForm.success_message || 'Thank you! Your registration has been submitted successfully.',
           redirect_url: updatedForm.redirect_url?.trim() || null,
           published_version: updatedForm.published_version || 1,
@@ -813,17 +833,25 @@ export class StorageService {
         };
 
         // Save form row
-        const { error: formError } = await supabase
+        let { error: formError } = await supabase
           .from('forms')
           .upsert(formPayload);
 
         if (formError) {
-          console.warn('Supabase form upsert error, attempting retry with stringified theme_config:', formError.message || formError);
+          console.warn('Supabase form upsert error, attempting retry:', formError.message || formError);
+          // If error is about a missing column, remove that key and retry
+          const missingCol = formError.message?.match(/Could not find the '([^']+)' column/)?.[1];
+          if (missingCol && formPayload[missingCol] !== undefined) {
+            delete formPayload[missingCol];
+          }
           // Retry with stringified theme_config in case the database column is TEXT
-          await supabase.from('forms').upsert({
+          const retryRes = await supabase.from('forms').upsert({
             ...formPayload,
             theme_config: JSON.stringify(formPayload.theme_config),
           });
+          if (retryRes.error) {
+            console.warn('Supabase retry upsert error:', retryRes.error.message || retryRes.error);
+          }
         }
 
         if (updatedForm.fields) {
