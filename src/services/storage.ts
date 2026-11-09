@@ -803,8 +803,15 @@ export class StorageService {
       presentationMode: resolvedPresentationMode,
     };
 
+    const sanitizedDeadline = sanitizeTimestamp(form.registration_deadline) || undefined;
+    const sanitizedEventDate = sanitizeTimestamp(form.event_date) || undefined;
+    const sanitizedEventEndDate = sanitizeTimestamp(form.event_end_date) || undefined;
+
     const updatedForm: Form = {
       ...form,
+      registration_deadline: sanitizedDeadline,
+      event_date: sanitizedEventDate,
+      event_end_date: sanitizedEventEndDate,
       presentation_mode: resolvedPresentationMode,
       theme_config: normalizedThemeConfig,
       updated_at: new Date().toISOString(),

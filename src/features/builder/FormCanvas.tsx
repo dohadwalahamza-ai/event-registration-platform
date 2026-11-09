@@ -17,6 +17,7 @@ import {
   Plus,
   Layers,
   ArrowRight,
+  X,
 } from 'lucide-react';
 import { Badge } from '../../generic-ui/components/Badge';
 import { getFormSections } from '../conditional-logic/evaluator';
@@ -30,6 +31,7 @@ interface FormCanvasProps {
   onDeleteField: (id: string) => void;
   onOpenBranding: () => void;
   onOpenFieldLibrary: () => void;
+  onRemoveDeadline?: () => void;
 }
 
 export const FormCanvas: React.FC<FormCanvasProps> = ({
@@ -41,6 +43,7 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
   onDeleteField,
   onOpenBranding,
   onOpenFieldLibrary,
+  onRemoveDeadline,
 }) => {
   const fields = form.fields || [];
   const theme = parseThemeConfig(form.theme_config);
@@ -188,15 +191,35 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
                 )}
 
                 {deadline && (
-                  <span className="flex items-center gap-1.5 font-medium text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200/80">
-                    <Clock className="w-3.5 h-3.5 text-amber-600" />
-                    <span>
-                      Deadline:{' '}
-                      {new Date(deadline).toLocaleDateString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </span>
+                  <span className="inline-flex items-center gap-1.5 font-medium text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200/80">
+                    <button
+                      type="button"
+                      onClick={onOpenBranding}
+                      className="inline-flex items-center gap-1.5 hover:underline cursor-pointer"
+                      title="Edit in Theme & Banner"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>
+                        Deadline:{' '}
+                        {new Date(deadline).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </button>
+                    {onRemoveDeadline && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveDeadline();
+                        }}
+                        className="ml-0.5 p-0.5 rounded-md hover:bg-amber-200/70 text-amber-700 hover:text-amber-900 transition-colors cursor-pointer"
+                        title="Remove deadline from this form"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </span>
                 )}
               </div>

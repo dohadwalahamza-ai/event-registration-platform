@@ -358,7 +358,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* View Responses shortcut (only if already saved in All Forms) */}
           {isDraftSaved && (
             <Button
@@ -366,7 +366,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
               variant="ghost"
               onClick={() => onViewResponses(form.id)}
               leftIcon={<Inbox className="w-3.5 h-3.5" />}
-              className="hidden sm:inline-flex"
+              className="hidden md:inline-flex"
             >
               Responses
             </Button>
@@ -391,14 +391,14 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
                     : 'Form will display all sections on a single continuous page.'
                 );
               }}
-              className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-indigo-600 transition-colors shadow-2xs cursor-pointer"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 h-9 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-indigo-600 transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
               title="Click to toggle between Step-by-Step Pages vs Single Page"
             >
-              <Layers className="w-3.5 h-3.5 text-indigo-600" />
+              <Layers className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
               <span>
                 {form.presentation_mode === 'all_at_once'
-                  ? 'Mode: 1 Continuous Page'
-                  : `Mode: ${sections.length} Step Pages`}
+                  ? 'Mode: 1 Page'
+                  : `Mode: ${sections.length} Steps`}
               </span>
             </button>
           )}
@@ -409,6 +409,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             variant="outline"
             onClick={() => setIsBrandingOpen(true)}
             leftIcon={<Palette className="w-3.5 h-3.5 text-indigo-600" />}
+            title="Edit event theme, accent colors, banners, and schedule"
           >
             Theme & Banner
           </Button>
@@ -457,7 +458,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
               ? 'Stored in Draft'
               : hasUnsavedChanges && isDraftSaved
               ? 'Update Draft*'
-              : 'Save as Draft'}
+              : 'Save Draft'}
           </Button>
 
           {/* Publish Event Button */}
@@ -545,6 +546,11 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
               onDeleteField={handleDeleteField}
               onOpenBranding={() => setIsBrandingOpen(true)}
               onOpenFieldLibrary={() => {}}
+              onRemoveDeadline={() => {
+                setForm((prev) => ({ ...prev, registration_deadline: '' }));
+                setHasUnsavedChanges(true);
+                success('Deadline Removed', 'Registration deadline cleared from this form.');
+              }}
             />
 
             {/* Right Inspector Panel */}

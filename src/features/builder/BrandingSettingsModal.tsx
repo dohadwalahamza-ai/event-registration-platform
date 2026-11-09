@@ -23,6 +23,24 @@ interface BrandingSettingsModalProps {
   onSave: (updatedForm: Form) => void;
 }
 
+function formatForDateTimeLocal(isoString?: string | null): string {
+  if (!isoString || typeof isoString !== 'string') return '';
+  const trimmed = isoString.trim();
+  if (!trimmed) return '';
+  try {
+    const d = new Date(trimmed);
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  } catch {
+    return '';
+  }
+}
+
 export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   isOpen,
   onClose,
@@ -32,10 +50,10 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   const [title, setTitle] = useState(form.title);
   const [description, setDescription] = useState(form.description);
   const [coverImageUrl, setCoverImageUrl] = useState(form.cover_image_url || '');
-  const [eventDate, setEventDate] = useState(form.event_date || '');
-  const [eventEndDate, setEventEndDate] = useState(form.event_end_date || '');
+  const [eventDate, setEventDate] = useState(formatForDateTimeLocal(form.event_date));
+  const [eventEndDate, setEventEndDate] = useState(formatForDateTimeLocal(form.event_end_date));
   const [venue, setVenue] = useState(form.venue || '');
-  const [deadline, setDeadline] = useState(form.registration_deadline || '');
+  const [deadline, setDeadline] = useState(formatForDateTimeLocal(form.registration_deadline));
   const [successMessage, setSuccessMessage] = useState(form.success_message);
   const [redirectUrl, setRedirectUrl] = useState(form.redirect_url || '');
   const [themeConfig, setThemeConfig] = useState<FormThemeConfig>(
@@ -60,10 +78,10 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
       setTitle(form.title || '');
       setDescription(form.description || '');
       setCoverImageUrl(form.cover_image_url || '');
-      setEventDate(form.event_date || '');
-      setEventEndDate(form.event_end_date || '');
+      setEventDate(formatForDateTimeLocal(form.event_date));
+      setEventEndDate(formatForDateTimeLocal(form.event_end_date));
       setVenue(form.venue || '');
-      setDeadline(form.registration_deadline || '');
+      setDeadline(formatForDateTimeLocal(form.registration_deadline));
       setSuccessMessage(form.success_message || '');
       setRedirectUrl(form.redirect_url || '');
       const parsedTheme = parseThemeConfig(form.theme_config);
@@ -380,9 +398,21 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Event Start Date & Time
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">
+                Event Start Date & Time
+              </label>
+              {eventDate && (
+                <button
+                  type="button"
+                  onClick={() => setEventDate('')}
+                  className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 transition-colors cursor-pointer"
+                  title="Remove event start date"
+                >
+                  Clear Date
+                </button>
+              )}
+            </div>
             <input
               type="datetime-local"
               value={eventDate}
@@ -392,15 +422,30 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Registration Deadline
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">
+                Registration Deadline (Optional)
+              </label>
+              {deadline && (
+                <button
+                  type="button"
+                  onClick={() => setDeadline('')}
+                  className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 transition-colors cursor-pointer"
+                  title="Remove deadline from form"
+                >
+                  Clear Deadline
+                </button>
+              )}
+            </div>
             <input
               type="datetime-local"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
               className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs focus:bg-white focus:outline-none"
             />
+            <span className="text-[10px] text-slate-400 mt-1 block">
+              Leave blank if this event has no registration deadline.
+            </span>
           </div>
 
           <div className="sm:col-span-2">
