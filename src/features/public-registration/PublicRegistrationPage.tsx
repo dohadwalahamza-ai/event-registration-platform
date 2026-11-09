@@ -133,17 +133,17 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
   const eventDate =
     form.event_date && form.event_date.trim() !== ''
       ? form.event_date
-      : '2026-11-20T10:00';
+      : null;
 
   const venue =
     form.venue && form.venue.trim() !== ''
       ? form.venue
-      : 'Grand Convention Center, Main Exhibition Hall';
+      : null;
 
   const deadline =
     form.registration_deadline && form.registration_deadline.trim() !== ''
       ? form.registration_deadline
-      : '2026-11-18T23:59';
+      : null;
 
   // Dynamic background atmosphere styling based on themeConfig.backgroundStyle
   const getThemeAtmosphere = (bg: string, accent: string, customBg: string) => {
@@ -660,29 +660,35 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           </div>
 
           {/* Quick Event Summary Reminder */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left text-xs">
-            <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center gap-2.5">
-              <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold uppercase opacity-60">Event Date</span>
-                <span className="font-semibold truncate block">
-                  {new Date(eventDate).toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-                </span>
-              </div>
-            </div>
+          {(eventDate || venue) && (
+            <div className={`grid grid-cols-1 ${eventDate && venue ? 'sm:grid-cols-2' : ''} gap-3 text-left text-xs`}>
+              {eventDate && (
+                <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center gap-2.5">
+                  <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-bold uppercase opacity-60">Event Date</span>
+                    <span className="font-semibold truncate block">
+                      {new Date(eventDate).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                </div>
+              )}
 
-            <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center gap-2.5">
-              <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold uppercase opacity-60">Venue</span>
-                <span className="font-semibold truncate block">{venue}</span>
-              </div>
+              {venue && (
+                <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center gap-2.5">
+                  <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-bold uppercase opacity-60">Venue</span>
+                    <span className="font-semibold truncate block">{venue}</span>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           {/* Redirect Notice if configured */}
           {form.redirect_url && !isPreview && (
@@ -844,70 +850,88 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         </div>
 
         {/* Event Schedule & Venue Metadata Badges */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Event Date */}
-          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
-            <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-xs shrink-0">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700">
-                Event Date
-              </span>
-              <span className="block text-xs sm:text-sm font-bold text-indigo-950 truncate mt-0.5">
-                {new Date(eventDate).toLocaleDateString(undefined, {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </span>
-              <span className="block text-[10px] font-semibold text-indigo-700/80 mt-0.5">
-                Starts at {new Date(eventDate).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
-          </div>
+        {(eventDate || venue || deadline) && (() => {
+          const metaCount = (eventDate ? 1 : 0) + (venue ? 1 : 0) + (deadline ? 1 : 0);
+          const gridColsClass =
+            metaCount === 1
+              ? 'grid-cols-1 max-w-md mx-auto'
+              : metaCount === 2
+              ? 'grid-cols-1 sm:grid-cols-2'
+              : 'grid-cols-1 sm:grid-cols-3';
 
-          {/* Event Venue */}
-          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-            <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-xs shrink-0">
-              <MapPin className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                Location & Venue
-              </span>
-              <span className="block text-xs sm:text-sm font-bold text-emerald-950 truncate mt-0.5" title={venue}>
-                {venue}
-              </span>
-              <span className="block text-[10px] font-semibold text-emerald-700/80 mt-0.5">
-                In-person Event
-              </span>
-            </div>
-          </div>
+          return (
+            <div className={`grid ${gridColsClass} gap-3`}>
+              {/* Event Date */}
+              {eventDate && (
+                <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                  <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-xs shrink-0">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                      Event Date
+                    </span>
+                    <span className="block text-xs sm:text-sm font-bold text-indigo-950 truncate mt-0.5">
+                      {new Date(eventDate).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </span>
+                    <span className="block text-[10px] font-semibold text-indigo-700/80 mt-0.5">
+                      Starts at {new Date(eventDate).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              )}
 
-          {/* Registration Deadline */}
-          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-            <div className="p-2.5 rounded-xl bg-amber-600 text-white shadow-xs shrink-0">
-              <Clock className="w-5 h-5" />
+              {/* Event Venue */}
+              {venue && (
+                <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                  <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-xs shrink-0">
+                    <MapPin className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                      Location & Venue
+                    </span>
+                    <span className="block text-xs sm:text-sm font-bold text-emerald-950 truncate mt-0.5" title={venue}>
+                      {venue}
+                    </span>
+                    <span className="block text-[10px] font-semibold text-emerald-700/80 mt-0.5">
+                      In-person Event
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Registration Deadline */}
+              {deadline && (
+                <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                  <div className="p-2.5 rounded-xl bg-amber-600 text-white shadow-xs shrink-0">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                      Registration Deadline
+                    </span>
+                    <span className="block text-xs sm:text-sm font-bold text-amber-950 truncate mt-0.5">
+                      {new Date(deadline).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded-full mt-1">
+                      ⏳ Closes at {new Date(deadline).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-700">
-                Registration Deadline
-              </span>
-              <span className="block text-xs sm:text-sm font-bold text-amber-950 truncate mt-0.5">
-                {new Date(deadline).toLocaleDateString(undefined, {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded-full mt-1">
-                ⏳ Closes at {new Date(deadline).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Multi-Section Step Progress Indicator (Visible in Mode B — Step-by-step) */}
         {isStepByStep && hasMultipleSections && (() => {

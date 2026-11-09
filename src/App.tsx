@@ -516,9 +516,9 @@ function AppContent() {
       description: 'Fill out this form to register for the upcoming event.',
       cover_image_url:
         'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80',
-      event_date: '2026-11-20T10:00',
-      venue: 'Grand Convention Center, Main Exhibition Hall',
-      registration_deadline: '2026-11-18T23:59',
+      event_date: '',
+      venue: '',
+      registration_deadline: '',
       status: 'draft',
       theme_config: {
         accentColor: '#4f46e5',

@@ -58,17 +58,17 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
   const eventDate =
     form.event_date && form.event_date.trim() !== ''
       ? form.event_date
-      : '2026-11-20T10:00';
+      : null;
 
   const venue =
     form.venue && form.venue.trim() !== ''
       ? form.venue
-      : 'Grand Convention Center, Main Exhibition Hall';
+      : null;
 
   const deadline =
     form.registration_deadline && form.registration_deadline.trim() !== ''
       ? form.registration_deadline
-      : '2026-11-18T23:59';
+      : null;
 
   const getCanvasBackground = () => {
     switch (backgroundStyle) {
@@ -164,36 +164,43 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
               </p>
             )}
 
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 pt-1 border-t border-slate-100">
-              <span className="flex items-center gap-1.5 font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
-                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                <span>
-                  {new Date(eventDate).toLocaleDateString(undefined, {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-                </span>
-              </span>
+            {(eventDate || venue || deadline) && (
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 pt-1 border-t border-slate-100">
+                {eventDate && (
+                  <span className="flex items-center gap-1.5 font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>
+                      {new Date(eventDate).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </span>
+                )}
 
-              <span className="flex items-center gap-1.5 font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
-                <MapPin className="w-3.5 h-3.5 text-indigo-600" />
-                <span>{venue}</span>
-              </span>
+                {venue && (
+                  <span className="flex items-center gap-1.5 font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
+                    <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>{venue}</span>
+                  </span>
+                )}
 
-              <span className="flex items-center gap-1.5 font-medium text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200/80">
-                <Clock className="w-3.5 h-3.5 text-amber-600" />
-                <span>
-                  Deadline:{' '}
-                  {new Date(deadline).toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </span>
-              </span>
-
-            </div>
+                {deadline && (
+                  <span className="flex items-center gap-1.5 font-medium text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200/80">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>
+                      Deadline:{' '}
+                      {new Date(deadline).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
