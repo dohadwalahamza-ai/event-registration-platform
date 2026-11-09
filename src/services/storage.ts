@@ -139,7 +139,7 @@ export function parseThemeConfig(raw: any): FormThemeConfig {
       backgroundStyle: val.backgroundStyle || 'banner_glass',
       borderRadius: val.borderRadius || 'xl',
       customBackgroundColor: val.customBackgroundColor || '#0f172a',
-      presentationMode: val.presentationMode || 'all_at_once',
+      presentationMode: val.presentationMode || 'step_by_step',
       section_routes: val.section_routes,
     };
   }
@@ -150,7 +150,7 @@ export function parseThemeConfig(raw: any): FormThemeConfig {
     backgroundStyle: 'banner_glass',
     borderRadius: 'xl',
     customBackgroundColor: '#0f172a',
-    presentationMode: 'all_at_once',
+    presentationMode: 'step_by_step',
   };
 }
 
@@ -229,7 +229,7 @@ export function unpackFormFromUrlPayload(payload: string): Form | null {
       status: (raw.st as any) || 'published',
       success_message: raw.sm || 'Thank you for registering! We have recorded your submission.',
       response_limit: raw.rl || 'multiple',
-      presentation_mode: raw.pm || raw.th?.presentationMode || 'all_at_once',
+      presentation_mode: raw.pm || raw.th?.presentationMode || 'step_by_step',
       published_version: 1,
       theme_config: parseThemeConfig(raw.th),
       created_at: new Date().toISOString(),
@@ -604,7 +604,7 @@ export class StorageService {
           const supaForm: Form = {
             ...formData,
             theme_config: parsedSupaTheme,
-            presentation_mode: formData.presentation_mode || parsedSupaTheme.presentationMode || 'all_at_once',
+            presentation_mode: formData.presentation_mode || parsedSupaTheme.presentationMode || 'step_by_step',
             fields: fields.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)),
           };
 
@@ -797,7 +797,7 @@ export class StorageService {
   static async saveForm(form: Form): Promise<Form> {
     const parsedTheme = parseThemeConfig(form.theme_config);
     const resolvedPresentationMode =
-      form.presentation_mode || parsedTheme.presentationMode || 'all_at_once';
+      form.presentation_mode || parsedTheme.presentationMode || 'step_by_step';
     const normalizedThemeConfig: FormThemeConfig = {
       ...parsedTheme,
       presentationMode: resolvedPresentationMode,

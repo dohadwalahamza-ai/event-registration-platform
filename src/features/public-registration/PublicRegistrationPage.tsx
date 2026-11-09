@@ -355,15 +355,31 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
   // Multi-section presentation configuration
   const sections = getFormSections(fields, form.theme_config);
   const hasMultipleSections = sections.length > 1;
-  const isStepByStep =
-    hasMultipleSections &&
-    form.presentation_mode !== 'all_at_once' &&
-    form.theme_config?.presentationMode !== 'all_at_once';
+  // Forms with multiple sections always navigate step-by-step on mobile and desktop
+  const isStepByStep = hasMultipleSections;
 
   const activeSectionIndex = Math.min(Math.max(0, currentSectionIndex), sections.length - 1);
   const currentSection = sections[activeSectionIndex] || sections[0];
   const nextTargetIndex = getNextSectionIndex(activeSectionIndex, sections, fields, formValues);
   const isFinalSection = !isStepByStep || nextTargetIndex === -1;
+
+  // Smoothly scroll down to the current active section / questions container
+  const scrollToActiveSection = () => {
+    if (typeof window === 'undefined') return;
+    setTimeout(() => {
+      const sectionIndicator = document.getElementById('section-step-indicator');
+      const questionsContainer = document.getElementById('form-questions-container');
+      const target = sectionIndicator || questionsContainer;
+
+      if (target) {
+        const yOffset = -20;
+        const y = target.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 50);
+  };
 
   const handleFieldChange = (fieldKey: string, value: any) => {
     setFormValues((prev) => ({
@@ -425,7 +441,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     if (nextIdx >= 0 && nextIdx < sections.length) {
       setSectionHistory((prev) => [...prev, nextIdx]);
       setCurrentSectionIndex(nextIdx);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToActiveSection();
     }
   };
 
@@ -444,7 +460,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     } else if (activeSectionIndex > 0) {
       setCurrentSectionIndex(activeSectionIndex - 1);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToActiveSection();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -579,6 +595,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     setSubmissionError(null);
     setIsSuccess(false);
     setSubmissionId(null);
+    setCurrentSectionIndex(0);
+    setSectionHistory([0]);
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -908,7 +926,10 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           const nextFieldCount = nextSection ? (nextVisibleFields.length || nextSection.fields.length) : 0;
 
           return (
-            <div className={`rounded-3xl p-5 sm:p-6 border shadow-sm space-y-4 animate-fade-in ${atmosphere.cardClass}`}>
+            <div
+              id="section-step-indicator"
+              className={`rounded-3xl p-5 sm:p-6 border shadow-sm space-y-4 animate-fade-in scroll-mt-6 ${atmosphere.cardClass}`}
+            >
               {/* Top Row: Section Badge, Name & Count + Next / Previous Section Buttons */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-1.5">
@@ -928,13 +949,13 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                       {currentFieldCount} {currentFieldCount === 1 ? 'question' : 'questions'}
                     </span>
                   </div>
-                  <h2 className={`text-lg sm:text-xl font-bold ${atmosphere.headingClass}`}>
+                  <h2 className={`text-base sm:text-xl font-bold leading-snug ${atmosphere.headingClass}`}>
                     {currentSection.title}
                   </h2>
                 </div>
 
                 {/* Top Section Navigation Buttons */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                   {activeSectionIndex > 0 && (
                     <Button
                       type="button"
@@ -942,6 +963,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                       variant="outline"
                       onClick={handlePrevSection}
                       leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}
+                      className="flex-1 sm:flex-initial"
                     >
                       Previous
                     </Button>
@@ -954,6 +976,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                       variant="primary"
                       onClick={handleNextSection}
                       rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+                      className="flex-1 sm:flex-initial"
                       style={{ backgroundColor: accentColor }}
                     >
                       Next Section
@@ -965,6 +988,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                       variant="primary"
                       onClick={handleSubmit}
                       rightIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                      className="flex-1 sm:flex-initial"
                       style={{ backgroundColor: accentColor }}
                     >
                       Submit Registration
@@ -1054,7 +1078,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                         e.preventDefault();
                         if (isCompleted) {
                           setCurrentSectionIndex(idx);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          scrollToActiveSection();
                         }
                       }}
                       disabled={!isCompleted && !isCurrent}
@@ -1108,7 +1132,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
         })()}
 
         {/* Dynamic Form Questions Container */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form id="form-questions-container" onSubmit={handleSubmit} className="space-y-4 scroll-mt-6">
           {(isStepByStep ? currentSection.fields : fields).map((field) => {
             // Evaluate conditional visibility reactive to formValues
             const isVisible = evaluateFieldVisibility(field, fields, formValues);
@@ -1148,12 +1172,13 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
           )}
 
           {/* Bottom Navigation & Action Bar */}
-          <div className={`rounded-2xl p-5 sm:p-6 border shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 ${atmosphere.cardClass}`}>
-            <div>
+          <div className={`rounded-2xl p-4 sm:p-6 border shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 ${atmosphere.cardClass}`}>
+            <div className="hidden sm:block">
               {isStepByStep && activeSectionIndex > 0 ? (
                 <Button
                   type="button"
                   variant="outline"
+                  size="md"
                   onClick={handlePrevSection}
                   leftIcon={<ArrowLeft className="w-4 h-4" />}
                 >
@@ -1166,7 +1191,21 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+              {/* Mobile-only Previous button for side-by-side touch layout */}
+              {isStepByStep && activeSectionIndex > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={handlePrevSection}
+                  leftIcon={<ArrowLeft className="w-4 h-4" />}
+                  className="flex-1 sm:hidden"
+                >
+                  Previous
+                </Button>
+              )}
+
               {isStepByStep && !isFinalSection ? (
                 <Button
                   type="button"
@@ -1174,7 +1213,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                   variant="primary"
                   onClick={handleNextSection}
                   rightIcon={<ArrowRight className="w-4 h-4" />}
-                  className="w-full sm:w-auto"
+                  className="flex-1 sm:flex-initial sm:w-auto"
                   style={{ backgroundColor: accentColor }}
                 >
                   Next Section
@@ -1186,12 +1225,17 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                   variant="primary"
                   isLoading={isSubmitting}
                   rightIcon={<ArrowRight className="w-4 h-4" />}
-                  className="w-full sm:w-auto"
+                  className="flex-1 sm:flex-initial sm:w-auto"
                   style={{ backgroundColor: accentColor }}
                 >
                   Submit Registration
                 </Button>
               )}
+            </div>
+
+            {/* Mobile-only subtle status note placed cleanly below buttons on small screens */}
+            <div className={`sm:hidden text-center text-[11px] pt-1 opacity-75 ${atmosphere.descClass}`}>
+              Official Registration • Responses saved securely
             </div>
           </div>
         </form>
