@@ -1017,9 +1017,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                     <span className={`font-semibold ${atmosphere.headingClass}`}>
                       Section {nextTargetIndex + 1} of {sections.length} — {nextSection.title}
                     </span>
-                    <span className="text-[11px] font-medium opacity-80 shrink-0">
-                      ({nextFieldCount} {nextFieldCount === 1 ? 'question' : 'questions'})
-                    </span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
@@ -1048,7 +1045,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                 {sections.map((sec, idx) => {
                   const isCurrent = idx === activeSectionIndex;
                   const isCompleted = idx < activeSectionIndex;
-                  const secVisibleCount = sec.fields.filter((f) => evaluateFieldVisibility(f, fields, formValues)).length;
 
                   return (
                     <button
@@ -1100,11 +1096,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                       >
                         {isCompleted ? '✓' : idx + 1}
                       </span>
-                      <span className="truncate max-w-[120px] sm:max-w-[160px]">
+                      <span className="truncate max-w-[140px] sm:max-w-[200px]">
                         {sec.title}
-                      </span>
-                      <span className="text-[10px] opacity-70">
-                        ({secVisibleCount})
                       </span>
                     </button>
                   );
