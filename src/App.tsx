@@ -12,9 +12,50 @@ import { FormsListView } from './features/forms/FormsListView';
 import { FormBuilderView } from './features/builder/FormBuilderView';
 import { ResponseManagementView } from './features/responses/ResponseManagementView';
 import { PublicRegistrationPage } from './features/public-registration/PublicRegistrationPage';
-import { Loader2, FileQuestion } from 'lucide-react';
+import { PublicLiveSpreadsheetView } from './features/responses/PublicLiveSpreadsheetView';
+import { Loader2, FileQuestion, AlertTriangle } from 'lucide-react';
 import { Button } from './generic-ui/components/Button';
 import { sendSubmissionNotification } from './utils/desktopNotification';
+
+function extractSheetSlugFromUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash || '';
+  const path = window.location.pathname || '';
+  const search = window.location.search || '';
+  const href = window.location.href || '';
+
+  // 1. Check path variations: /sheet/:slug, /%23/sheet/:slug, /live-sheet/:slug
+  const pathMatch = path.match(/^(?:\/%23)?\/?(?:sheet|live-sheet)\/([^?&#/]+)/i);
+  if (pathMatch && pathMatch[1]) {
+    return decodeURIComponent(pathMatch[1]).trim().replace(/\/+$/, '');
+  }
+
+  // 2. Check hash variations: #/sheet/:slug, #sheet/:slug, #/live-sheet/:slug
+  const hashMatch = hash.match(/^#\/?(?:sheet|live-sheet)\/([^?&#]+)/i);
+  if (hashMatch && hashMatch[1]) {
+    return decodeURIComponent(hashMatch[1]).trim().replace(/\/+$/, '');
+  }
+
+  // 3. Check query parameter variations: ?sheet=:slug, ?liveSheet=:slug
+  try {
+    const searchParams = new URLSearchParams(search);
+    const qSlug = searchParams.get('sheet') || searchParams.get('liveSheet');
+    if (qSlug) {
+      return decodeURIComponent(qSlug).trim().replace(/\/+$/, '');
+    }
+  } catch {}
+
+  // 4. Fallback check full decoded href
+  try {
+    const decodedHref = decodeURIComponent(href);
+    const hrefMatch = decodedHref.match(/[#/]sheet\/([A-Za-z0-9_-]+)/i);
+    if (hrefMatch && hrefMatch[1]) {
+      return hrefMatch[1].trim();
+    }
+  } catch {}
+
+  return null;
+}
 
 function extractSlugFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
@@ -98,15 +139,23 @@ function AppContent() {
   const [publicSlug, setPublicSlug] = useState<string | null>(initialSlug);
   const [publicForm, setPublicForm] = useState<Form | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState<boolean>(Boolean(initialSlug));
+
+  // Synchronously initialize public sheet slug for live spreadsheet page (/sheet/:slug)
+  const initialSheetSlug = extractSheetSlugFromUrl();
+  const [publicSheetSlug, setPublicSheetSlug] = useState<string | null>(initialSheetSlug);
+  const [publicSheetForm, setPublicSheetForm] = useState<Form | null>(null);
+  const [isPublicSheetLoading, setIsPublicSheetLoading] = useState<boolean>(Boolean(initialSheetSlug));
+
   const [isLoginRoute, setIsLoginRoute] = useState(false);
   const { success, error, info, warning } = useToast();
 
   const parseRoute = () => {
     const slug = extractSlugFromUrl();
+    const sheetSlug = extractSheetSlugFromUrl();
     const hash = window.location.hash || '';
 
     // Auto-clear cache on load seamlessly in the background
-    StorageService.clearStaleFormCache(slug || undefined);
+    StorageService.clearStaleFormCache(slug || sheetSlug || undefined);
 
     if (slug !== publicSlug) {
       setPublicForm(null); // Clear previous form immediately so it never shows
@@ -116,6 +165,14 @@ function AppContent() {
     }
     setPublicSlug(slug);
 
+    if (sheetSlug !== publicSheetSlug) {
+      setPublicSheetForm(null);
+      if (sheetSlug) {
+        setIsPublicSheetLoading(true);
+      }
+    }
+    setPublicSheetSlug(sheetSlug);
+
     if (hash === '#/login') {
       setIsLoginRoute(true);
       return;
@@ -123,7 +180,7 @@ function AppContent() {
       setIsLoginRoute(false);
     }
 
-    if (!slug) {
+    if (!slug && !sheetSlug) {
       if (hash.startsWith('#/forms')) {
         setNewDraftForm(null);
         setCurrentTab('forms');
@@ -370,6 +427,36 @@ function AppContent() {
       isCancelled = true;
     };
   }, [publicSlug]);
+
+  // Dedicated loader for public live spreadsheet pages (/sheet/:slug)
+  useEffect(() => {
+    if (!publicSheetSlug) {
+      setPublicSheetForm(null);
+      setIsPublicSheetLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsPublicSheetLoading(true);
+    StorageService.getFormBySlug(publicSheetSlug)
+      .then((form) => {
+        if (!isCancelled) {
+          setPublicSheetForm(form);
+          setIsPublicSheetLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching form for live sheet:', err);
+        if (!isCancelled) {
+          setPublicSheetForm(null);
+          setIsPublicSheetLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [publicSheetSlug]);
 
   // Reactive listener for form saves across the builder and public preview
   useEffect(() => {
@@ -654,6 +741,47 @@ function AppContent() {
     }
 
     return <PublicRegistrationPage key={publicForm.id || publicSlug} form={publicForm} />;
+  }
+
+  // 1b. PUBLIC LIVE SPREADSHEET ROUTE (/sheet/:slug) - No login required
+  if (publicSheetSlug) {
+    if (isPublicSheetLoading) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+          <div className="flex flex-col items-center gap-3 text-slate-800">
+            <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+            <span className="text-xs font-semibold text-slate-600">Connecting to live spreadsheet...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (!publicSheetForm) {
+      return (
+        <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-slate-800 rounded-3xl p-8 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-bold text-white">Spreadsheet Not Found</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              The live spreadsheet for this event could not be loaded. The event may not exist or the link may be incorrect.
+            </p>
+            <div className="flex items-center justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="px-5 py-2.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs cursor-pointer transition-colors"
+              >
+                Refresh Page
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return <PublicLiveSpreadsheetView form={publicSheetForm} />;
   }
 
   // 2. LOADING STATE
