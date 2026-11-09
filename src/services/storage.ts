@@ -1155,6 +1155,136 @@ export class StorageService {
     return mergedList;
   }
 
+  /**
+   * Subscribe to real-time submission events from Supabase WebSocket channel
+   * Streams submissions submitted on mobile phones or external devices instantly to admin
+   */
+  static subscribeToSubmissions(
+    onInsert: (sub: Submission) => void,
+    onUpdate?: (sub: Submission) => void,
+    onDelete?: (id: string) => void
+  ): () => void {
+    const supabase = getSupabaseClient();
+    let isCleanedUp = false;
+
+    // Periodic safety sync (every 12 seconds) so any connection blips recover automatically
+    const pollInterval = setInterval(async () => {
+      if (isCleanedUp) return;
+      try {
+        const freshSubs = await this.getAllSubmissions();
+        const rawLocal = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+        const currentCount = rawLocal ? JSON.parse(rawLocal).length : 0;
+        if (freshSubs.length !== currentCount) {
+          freshSubs.forEach((sub) => {
+            onInsert(sub);
+          });
+        }
+      } catch {}
+    }, 12000);
+
+    if (!supabase) {
+      return () => {
+        isCleanedUp = true;
+        clearInterval(pollInterval);
+      };
+    }
+
+    try {
+      const channelName = `realtime-submissions-${Date.now()}`;
+      const channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'submissions' },
+          (payload: any) => {
+            if (isCleanedUp) return;
+
+            if (payload.eventType === 'INSERT' && payload.new) {
+              const row = payload.new;
+              const normS: Submission = {
+                id: row.id,
+                form_id: row.form_id,
+                form_version: row.form_version || 1,
+                applicant_name: row.applicant_name,
+                applicant_email: row.applicant_email,
+                submission_data: row.submission_data || {},
+                submitted_at: row.submitted_at || new Date().toISOString(),
+                status: row.status || 'confirmed',
+                admin_notes: row.admin_notes || (row.submission_data?._admin_notes as string) || '',
+              };
+
+              // Persist into local storage
+              try {
+                const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+                const list: Submission[] = raw ? JSON.parse(raw) : [];
+                if (!list.some((s) => s.id === normS.id)) {
+                  list.unshift(normS);
+                  localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(list));
+                }
+              } catch {}
+
+              onInsert(normS);
+              window.dispatchEvent(new CustomEvent('submission_created', { detail: normS }));
+            } else if (payload.eventType === 'UPDATE' && payload.new) {
+              const row = payload.new;
+              const normS: Submission = {
+                id: row.id,
+                form_id: row.form_id,
+                form_version: row.form_version || 1,
+                applicant_name: row.applicant_name,
+                applicant_email: row.applicant_email,
+                submission_data: row.submission_data || {},
+                submitted_at: row.submitted_at || new Date().toISOString(),
+                status: row.status || 'confirmed',
+                admin_notes: row.admin_notes || (row.submission_data?._admin_notes as string) || '',
+              };
+
+              try {
+                const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+                const list: Submission[] = raw ? JSON.parse(raw) : [];
+                const idx = list.findIndex((s) => s.id === normS.id);
+                if (idx >= 0) {
+                  list[idx] = normS;
+                  localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(list));
+                }
+              } catch {}
+
+              onUpdate?.(normS);
+            } else if (payload.eventType === 'DELETE' && payload.old) {
+              const id = payload.old.id;
+              if (id) {
+                try {
+                  const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+                  const list: Submission[] = raw ? JSON.parse(raw) : [];
+                  const filtered = list.filter((s) => s.id !== id);
+                  localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(filtered));
+                } catch {}
+
+                onDelete?.(id);
+              }
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('⚡ Supabase Realtime Submissions Channel Active');
+          }
+        });
+
+      return () => {
+        isCleanedUp = true;
+        clearInterval(pollInterval);
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn('Failed to subscribe to realtime submissions:', err);
+      return () => {
+        isCleanedUp = true;
+        clearInterval(pollInterval);
+      };
+    }
+  }
+
   static async getSubmissionsForForm(formId: string): Promise<Submission[]> {
     const all = await this.getAllSubmissions();
     const cleanId = formId.toLowerCase().replace(/^(event-form-|form-)/, '');

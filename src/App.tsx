@@ -269,7 +269,7 @@ function AppContent() {
     loadData();
   }, []);
 
-  // Listen for real-time submission creations across windows and tabs
+  // Listen for real-time submission creations across windows, mobile devices, and Supabase WebSockets
   useEffect(() => {
     const handleSubmissionCreated = (e: any) => {
       const newSub: Submission = e.detail;
@@ -303,11 +303,32 @@ function AppContent() {
     };
     window.addEventListener('storage', handleStorageChange);
 
+    // Supabase Realtime channel: streams submissions from any mobile phone or external device
+    const unsubscribeRealtime = StorageService.subscribeToSubmissions(
+      (newSub) => {
+        setSubmissions((prev) => {
+          if (prev.some((s) => s.id === newSub.id)) return prev;
+          return [newSub, ...prev];
+        });
+        StorageService.getDashboardStats().then(setStats).catch(() => {});
+      },
+      (updatedSub) => {
+        setSubmissions((prev) =>
+          prev.map((s) => (s.id === updatedSub.id ? updatedSub : s))
+        );
+      },
+      (deletedId) => {
+        setSubmissions((prev) => prev.filter((s) => s.id !== deletedId));
+        StorageService.getDashboardStats().then(setStats).catch(() => {});
+      }
+    );
+
     return () => {
       window.removeEventListener('submission_created', handleSubmissionCreated);
       window.removeEventListener('storage', handleStorageChange);
+      unsubscribeRealtime();
     };
-  }, []);
+  }, [forms]);
 
   // Automatically refresh submissions when switching to Responses or Dashboard
   useEffect(() => {

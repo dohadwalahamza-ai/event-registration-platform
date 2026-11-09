@@ -819,33 +819,55 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
             </select>
           </div>
 
-          {/* Prominent Export CSV Button */}
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleExportCSV}
-            leftIcon={<Download className="w-4 h-4 text-white" />}
-            className="shadow-sm"
-          >
-            Export CSV ({filteredSubmissions.length})
-          </Button>
+          {/* Realtime Live Sync Indicator & Prominent Export CSV Button */}
+          <div className="flex items-center gap-2">
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs"
+              title="Supabase WebSocket Realtime is connected. Every registration on mobile or web updates this table and the CSV instantly."
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span className="hidden sm:inline">Live Realtime Sync</span>
+              <span className="sm:hidden">Live</span>
+            </div>
+
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleExportCSV}
+              leftIcon={<Download className="w-4 h-4 text-white" />}
+              className="shadow-sm transition-all"
+            >
+              Export CSV ({filteredSubmissions.length})
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Live Submission Alert Banner (Task 26) */}
+      {/* Live Submission Alert Banner */}
       {newlyArrivedSubmission && (
-        <div className="p-4 rounded-2xl bg-indigo-50/90 border border-indigo-200 shadow-xs flex items-center justify-between gap-3 animate-fade-in">
+        <div className="p-4 rounded-2xl bg-indigo-50/95 border border-indigo-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
           <div className="flex items-center gap-2.5 text-xs text-indigo-950">
             <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 animate-bounce" />
             <div>
-              <span className="font-bold">New Registration: </span>
+              <span className="font-bold">⚡ Live Response Received: </span>
               <span>
                 <strong>{newlyArrivedSubmission.applicantName}</strong> registered for "
                 {newlyArrivedSubmission.formTitle}" at {newlyArrivedSubmission.time}
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="px-3 py-1 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-xs font-semibold hover:bg-indigo-50 transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Updated CSV</span>
+            </button>
             {selectedEventId !== newlyArrivedSubmission.formId && (
               <button
                 type="button"
@@ -856,16 +878,16 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                 }}
                 className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-xs cursor-pointer inline-flex items-center gap-1"
               >
-                <span>Switch to {newlyArrivedSubmission.formTitle}</span>
+                <span>View {newlyArrivedSubmission.formTitle}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
             <button
               type="button"
               onClick={() => setNewlyArrivedSubmission(null)}
-              className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              className="p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-200/50 cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
