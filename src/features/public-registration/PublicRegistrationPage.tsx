@@ -28,6 +28,8 @@ import {
   Layers,
 } from 'lucide-react';
 import { Button } from '../../generic-ui/components/Button';
+import { RichTextRenderer } from '../../generic-ui/components/RichTextRenderer';
+import { stripHtml } from '../../utils/sanitizeHtml';
 import confetti from 'canvas-confetti';
 
 interface PublicRegistrationPageProps {
@@ -93,7 +95,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
     };
 
     const description =
-      form.description?.trim() ||
+      stripHtml(form.description?.trim()) ||
       `Register online for ${form.title}. Fill out the official registration form to participate.`;
     const canonicalUrl = `${window.location.origin}/e/${(form.slug || form.id).trim()}`;
     const imageUrl =
@@ -843,8 +845,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
 
           {/* Form Description */}
           {form.description && (
-            <div className={`p-6 border-b text-sm leading-relaxed whitespace-pre-line ${atmosphere.descClass} ${atmosphere.borderClass}`}>
-              {form.description}
+            <div className={`p-6 border-b text-sm leading-relaxed ${atmosphere.descClass} ${atmosphere.borderClass}`}>
+              <RichTextRenderer content={form.description} />
             </div>
           )}
         </div>

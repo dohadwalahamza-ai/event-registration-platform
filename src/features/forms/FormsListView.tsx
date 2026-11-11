@@ -28,6 +28,7 @@ import { Button } from '../../generic-ui/components/Button';
 import { Badge } from '../../generic-ui/components/Badge';
 import { Modal } from '../../generic-ui/components/Modal';
 import { useToast } from '../../generic-ui/ToastContext';
+import { stripHtml } from '../../utils/sanitizeHtml';
 import { PublishShareModal } from '../builder/PublishShareModal';
 import { StorageService } from '../../services/storage';
 
@@ -86,7 +87,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
         const matchesSearch =
           form.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
           form.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          form.description.toLowerCase().includes(searchTerm.toLowerCase());
+          stripHtml(form.description).toLowerCase().includes(searchTerm.toLowerCase());
         return matchesStatus && matchesSearch;
       })
       .sort((a, b) => {
@@ -470,7 +471,7 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                 <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                   <div className="space-y-2">
                     <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                      {form.description || 'No description provided.'}
+                      {stripHtml(form.description) || 'No description provided.'}
                     </p>
 
                     <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">

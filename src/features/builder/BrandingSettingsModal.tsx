@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { parseThemeConfig } from '../../services/storage';
+import { RichTextEditor } from '../../generic-ui/components/RichTextEditor';
 
 interface BrandingSettingsModalProps {
   isOpen: boolean;
@@ -449,15 +450,14 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
           </div>
 
           <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Description & Participant Instructions
-            </label>
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Explain rules, schedule, prizes, or eligibility..."
-              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+            <RichTextEditor
+              label="Description & Participant Guidelines"
+              description="Rich formatting: Bold, Italic, Headings, Lists & Links"
+              value={description || ''}
+              onChange={setDescription}
+              placeholder="Explain rules, schedule, prizes, eligibility, or participation guidelines..."
+              minHeight="130px"
+              maxHeight="260px"
             />
           </div>
         </div>

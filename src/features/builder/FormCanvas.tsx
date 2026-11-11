@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { Badge } from '../../generic-ui/components/Badge';
+import { RichTextRenderer } from '../../generic-ui/components/RichTextRenderer';
 import { getFormSections } from '../conditional-logic/evaluator';
 
 interface FormCanvasProps {
@@ -162,9 +163,9 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
           {/* Description & Event Metadata */}
           <div className="p-6 space-y-4">
             {form.description && (
-              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
-                {form.description}
-              </p>
+              <div className="text-sm text-slate-600 leading-relaxed">
+                <RichTextRenderer content={form.description} />
+              </div>
             )}
 
             {(eventDate || venue || deadline) && (
