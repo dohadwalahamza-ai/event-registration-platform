@@ -4,9 +4,9 @@ export const Footer: React.FC = () => {
   return (
     <footer className="py-6 px-6 sm:px-8 border-t border-slate-200/80 bg-white/60 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div className="flex items-center gap-2">
-        <span className="font-semibold text-slate-700">EventForm Platform</span>
+        <span className="font-semibold text-slate-700">Managed by Kharghar Jamaat</span>
         <span className="text-slate-300">•</span>
-        <span>Dynamic Form Builder & Registration Engine</span>
+        <span>Event Registration Platform</span>
       </div>
 
       <div className="flex items-center gap-4 text-slate-500">

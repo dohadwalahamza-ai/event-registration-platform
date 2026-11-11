@@ -753,8 +753,8 @@ export const PublicLiveSpreadsheetView: React.FC<PublicLiveSpreadsheetViewProps>
             <span>
               Showing <strong>{sortedSubmissions.length}</strong> of <strong>{submissions.length}</strong> registrations
             </span>
-            <span className="text-[11px] text-slate-400">
-              Powered by EventForm • Cloud Realtime Active
+            <span className="text-[11px] text-slate-500">
+              Managed by Kharghar Jamaat • Cloud Realtime Active
             </span>
           </div>
         </div>

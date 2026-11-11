@@ -734,6 +734,10 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
               </Button>
             )}
           </div>
+
+          <div className="text-center text-xs pt-4 text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800">
+            Managed by <span className="font-semibold text-slate-700 dark:text-slate-300">Kharghar Jamaat</span>
+          </div>
         </div>
       </div>
     );
@@ -870,6 +874,10 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
             <p className="text-[11px] text-slate-400 dark:text-slate-500 pt-2">
               Have questions? Please reach out directly to the event host or committee.
             </p>
+
+            <div className="text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800">
+              Managed by <span className="font-semibold text-slate-700 dark:text-slate-300">Kharghar Jamaat</span>
+            </div>
           </div>
         </div>
       </div>
@@ -896,6 +904,10 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
               ? 'The deadline for this event has passed. No further registrations are being accepted.'
               : 'The organizers have temporarily or permanently closed registrations for this event.'}
           </p>
+
+          <div className="text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800">
+            Managed by <span className="font-semibold text-slate-700 dark:text-slate-300">Kharghar Jamaat</span>
+          </div>
         </div>
       </div>
     );
@@ -1419,7 +1431,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
 
         {/* Footer branding */}
         <div className={`text-center text-xs py-4 ${atmosphere.footerText}`}>
-          Powered by <span className="font-semibold text-slate-600">EventForm</span> • Secure &
+          Managed by <span className="font-semibold text-slate-600 dark:text-slate-300">Kharghar Jamaat</span> • Secure &
           Fast Event Registration
         </div>
       </div>
