@@ -823,18 +823,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
                   </p>
                 </div>
               </div>
-
-              {/* Custom note / success message if organizer provided one */}
-              {form.success_message &&
-                form.success_message !==
-                  'Thank you for registering! We have recorded your submission.' && (
-                  <div className="pt-2.5 border-t border-indigo-100/60 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400">
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">
-                      Organizer Note:{' '}
-                    </span>
-                    {form.success_message}
-                  </div>
-                )}
             </div>
 
             {/* Event Metadata (Date & Venue) if available */}
