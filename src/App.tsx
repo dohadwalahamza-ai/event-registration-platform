@@ -740,7 +740,18 @@ function AppContent() {
       );
     }
 
-    return <PublicRegistrationPage key={publicForm.id || publicSlug} form={publicForm} />;
+    const isPreviewRequested =
+      typeof window !== 'undefined' &&
+      (new URLSearchParams(window.location.search).get('preview') === 'true' ||
+        window.location.hash.includes('preview=true'));
+
+    return (
+      <PublicRegistrationPage
+        key={publicForm.id || publicSlug}
+        form={publicForm}
+        isPreview={isPreviewRequested}
+      />
+    );
   }
 
   // 1b. PUBLIC LIVE SPREADSHEET ROUTE (/sheet/:slug) - No login required

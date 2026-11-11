@@ -85,14 +85,12 @@ function initializeStorage() {
   if (!existingForms) {
     localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify([]));
   } else {
-    // Purge default sample seed forms and dummy fallback forms from localStorage
+    // Purge dummy fallback forms from localStorage
     try {
       const parsed: Form[] = JSON.parse(existingForms);
       if (Array.isArray(parsed)) {
         const cleaned = parsed.filter(
-          (f) =>
-            !f.id.startsWith('form-fallback-') &&
-            f.title !== 'Event Registration Form'
+          (f) => !f.id.startsWith('form-fallback-')
         );
         if (cleaned.length !== parsed.length) {
           localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(cleaned));
@@ -500,7 +498,6 @@ export class StorageService {
     const localFound = localForms.find(
       (f) =>
         !deletedIds.has(f.id) &&
-        f.title !== 'Event Registration Form' &&
         (f.slug.toLowerCase() === cleanSlug ||
           f.id.toLowerCase() === cleanSlug ||
           f.slug.toLowerCase() === `event-form-${coreSlug}` ||
@@ -1131,14 +1128,21 @@ export class StorageService {
           for (const item of missingRemote) {
             try {
               // Ensure parent form row exists first to prevent foreign key errors
-              await supabase.from('forms').upsert({
-                id: item.form_id,
-                owner_id: 'admin',
-                title: 'Event Form',
-                slug: item.form_id,
-                status: 'published',
-                updated_at: new Date().toISOString(),
-              });
+              // NEVER overwrite existing form's title, slug, status, or fields!
+              const { data: existingFormRow } = await supabase
+                .from('forms')
+                .select('id')
+                .eq('id', item.form_id)
+                .maybeSingle();
+
+              if (!existingFormRow) {
+                const rawForms = localStorage.getItem(STORAGE_KEYS.FORMS);
+                const localListForms: Form[] = rawForms ? JSON.parse(rawForms) : [];
+                const localFormMatch = localListForms.find((f) => f.id === item.form_id);
+                if (localFormMatch) {
+                  await StorageService.saveForm(localFormMatch);
+                }
+              }
               await supabase.from('submissions').insert([
                 {
                   id: item.id,
@@ -1327,9 +1331,12 @@ export class StorageService {
         resolvedFormId = matched.id;
         resolvedFormTitle = matched.title;
 
-        // Strict Server/Service Enforcement: Check Deadline & Closed Status (Task 32)
+        // Block closed, offline, or draft forms from accepting submissions
         if (matched.status === 'closed') {
-          throw new Error('Registration is closed for this event. No further submissions are being accepted.');
+          throw new Error('Registration is closed for this event. No further registrations are being accepted.');
+        }
+        if (matched.status === 'draft' || (matched.status as string) !== 'published') {
+          throw new Error('This form is currently offline. Submissions are not being accepted at this time.');
         }
         if (isFormExpired(matched)) {
           // Asynchronously transition form in database
@@ -1338,10 +1345,11 @@ export class StorageService {
         }
       }
     } catch (validationErr: any) {
-      if (validationErr?.message && validationErr.message.includes('deadline')) {
-        throw validationErr;
-      }
-      if (validationErr?.message && validationErr.message.includes('closed')) {
+      if (validationErr?.message && (
+        validationErr.message.includes('deadline') ||
+        validationErr.message.includes('closed') ||
+        validationErr.message.includes('offline')
+      )) {
         throw validationErr;
       }
     }
@@ -1377,17 +1385,35 @@ export class StorageService {
     if (supabase) {
       try {
         // Ensure form row exists in Supabase so foreign key constraint NEVER rejects the submission
+        // BUT NEVER mutate or overwrite an existing form's title, slug, status, or fields!
         try {
-          await supabase.from('forms').upsert({
-            id: newSub.form_id,
-            owner_id: 'admin',
-            title: resolvedFormTitle,
-            slug: newSub.form_id,
-            status: 'published',
-            updated_at: new Date().toISOString(),
-          });
+          const { data: existingFormRow } = await supabase
+            .from('forms')
+            .select('id')
+            .eq('id', newSub.form_id)
+            .maybeSingle();
+
+          if (!existingFormRow) {
+            const rawForms = localStorage.getItem(STORAGE_KEYS.FORMS);
+            const localListForms: Form[] = rawForms ? JSON.parse(rawForms) : [];
+            const localFormMatch = localListForms.find((f) => f.id === newSub.form_id);
+            if (localFormMatch) {
+              await StorageService.saveForm(localFormMatch);
+            } else {
+              await supabase.from('forms').insert([
+                {
+                  id: newSub.form_id,
+                  owner_id: 'admin',
+                  title: resolvedFormTitle || 'Event Form',
+                  slug: newSub.form_id,
+                  status: 'published',
+                  updated_at: new Date().toISOString(),
+                },
+              ]);
+            }
+          }
         } catch (fkCheckErr) {
-          console.warn('Form upsert check error for foreign key:', fkCheckErr);
+          console.warn('Form existence check error for foreign key:', fkCheckErr);
         }
 
         const insertPromise = supabase.from('submissions').insert([

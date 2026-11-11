@@ -113,3 +113,4 @@ export function stripHtml(html?: string | null): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
+

@@ -315,14 +315,26 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
 
             <div className="flex items-center gap-2 ml-auto">
               {form.status === 'published' ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePublishToggle('closed')}
-                  className="text-amber-700 hover:bg-amber-50 h-7 text-xs px-2.5"
-                >
-                  Close Registration
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onUpdateStatus('draft')}
+                    className="text-slate-700 hover:bg-slate-100 h-7 text-xs px-2.5"
+                    title="Take form offline and save as draft"
+                  >
+                    Unpublish (Draft)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePublishToggle('closed')}
+                    className="text-amber-700 hover:bg-amber-50 h-7 text-xs px-2.5"
+                    title="Mark registration as closed"
+                  >
+                    Close
+                  </Button>
+                </>
               ) : (
                 <Button
                   variant="primary"
@@ -330,7 +342,7 @@ export const PublishShareModal: React.FC<PublishShareModalProps> = ({
                   onClick={() => handlePublishToggle('published')}
                   className="h-7 text-xs px-2.5"
                 >
-                  {form.status === 'closed' ? 'Reopen Form' : 'Publish Now'}
+                  {form.status === 'closed' ? 'Reopen Form' : 'Publish Live'}
                 </Button>
               )}
 

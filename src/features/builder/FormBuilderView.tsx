@@ -305,9 +305,37 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
           </button>
 
           <div className="flex items-center gap-2 min-w-0">
-            <h2 className="text-sm font-bold text-slate-900 truncate max-w-[140px] sm:max-w-xs md:max-w-md">
-              {form.title || 'Untitled Form'}
-            </h2>
+            <input
+              type="text"
+              value={form.title}
+              onChange={(e) => {
+                const nextTitle = e.target.value;
+                const updated = { ...form, title: nextTitle };
+                latestFormRef.current = updated;
+                setForm(updated);
+                setHasUnsavedChanges(true);
+              }}
+              onBlur={() => {
+                const trimmed = (form.title || '').trim();
+                const resolvedTitle = trimmed || 'Untitled Event Form';
+                if (resolvedTitle !== form.title) {
+                  const updated = { ...form, title: resolvedTitle };
+                  latestFormRef.current = updated;
+                  setForm(updated);
+                  executePersist(updated, true);
+                } else if (hasUnsavedChanges) {
+                  executePersist(form, true);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              className="text-sm font-bold text-slate-900 bg-transparent hover:bg-slate-100 focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded px-2 py-0.5 border border-transparent focus:border-indigo-300 transition-colors max-w-[160px] sm:max-w-xs md:max-w-md truncate"
+              placeholder="Untitled Event Form"
+              title="Click to rename form directly"
+            />
             <Badge
               variant={
                 form.status === 'published'
@@ -422,7 +450,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
               if (hasUnsavedChanges || !isDraftSaved) {
                 await executePersist(latestFormRef.current, true);
               }
-              window.open(`/e/${form.slug}`, '_blank');
+              window.open(`/e/${form.slug}?preview=true`, '_blank');
             }}
             leftIcon={<ExternalLink className="w-3.5 h-3.5 text-slate-600" />}
             title="Preview live form in a new browser tab"
