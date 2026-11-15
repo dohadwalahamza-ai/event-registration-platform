@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Submission, DashboardStats } from './types';
-import { StorageService, isSubmissionForForm, packFormToUrlPayload } from './services/storage';
+import { StorageService, isSubmissionForForm, isSystemForm, packFormToUrlPayload } from './services/storage';
 import { getSupabaseClient } from './services/supabaseClient';
 import { Layout } from './generic-ui/Layout';
 import { NavigationTab } from './generic-ui/Sidebar';
@@ -352,9 +352,39 @@ function AppContent() {
 
     window.addEventListener('submission_created', handleSubmissionCreated);
 
+    const handleFormDeleted = (e: any) => {
+      const deletedId = e.detail;
+      if (deletedId) {
+        const cleanId = String(deletedId).toLowerCase().replace(/^(event-form-|form-)/, '');
+        setForms((prev) => prev.filter((f) => f.id !== deletedId && f.id.toLowerCase() !== deletedId.toLowerCase()));
+        setSubmissions((prev) =>
+          prev.filter((s) => {
+            const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+            return s.form_id !== deletedId && subClean !== cleanId;
+          })
+        );
+        StorageService.getDashboardStats().then(setStats).catch(() => {});
+      }
+    };
+
+    const handleSubmissionDeleted = (e: any) => {
+      const deletedSubId = e.detail;
+      if (deletedSubId) {
+        setSubmissions((prev) => prev.filter((s) => s.id !== deletedSubId));
+        StorageService.getDashboardStats().then(setStats).catch(() => {});
+      }
+    };
+
+    window.addEventListener('form_deleted', handleFormDeleted);
+    window.addEventListener('submission_deleted', handleSubmissionDeleted);
+
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'eventform_submissions_v1') {
         StorageService.getAllSubmissions().then(setSubmissions).catch(() => {});
+        StorageService.getDashboardStats().then(setStats).catch(() => {});
+      }
+      if (e.key === 'eventform_forms_v1' || e.key === 'eventform_deleted_ids_v1') {
+        StorageService.getForms().then(setForms).catch(() => {});
         StorageService.getDashboardStats().then(setStats).catch(() => {});
       }
     };
@@ -382,6 +412,8 @@ function AppContent() {
 
     return () => {
       window.removeEventListener('submission_created', handleSubmissionCreated);
+      window.removeEventListener('form_deleted', handleFormDeleted);
+      window.removeEventListener('submission_deleted', handleSubmissionDeleted);
       window.removeEventListener('storage', handleStorageChange);
       unsubscribeRealtime();
     };
@@ -499,6 +531,7 @@ function AppContent() {
   const responseCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
     for (const f of forms) {
+      if (isSystemForm(f)) continue;
       counts[f.id] = submissions.filter((s) => isSubmissionForForm(s, f)).length;
     }
     return counts;

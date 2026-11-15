@@ -44,6 +44,167 @@ function addDeletedSubmissionId(id: string) {
   localStorage.setItem(STORAGE_KEYS.DELETED_SUBMISSION_IDS, JSON.stringify(Array.from(set)));
 }
 
+export const SYSTEM_STATE_FORM_ID = '__app_system_state__';
+
+export const isSystemForm = (f: any): boolean => {
+  if (!f || !f.id) return true;
+  const id = String(f.id).trim();
+  return id === SYSTEM_STATE_FORM_ID || id.startsWith('__');
+};
+
+/**
+ * Fetch remote deleted blacklist from Supabase to keep all devices (mobile, desktop) in sync
+ */
+export async function syncRemoteDeletedBlacklist(): Promise<{ formIds: Set<string>; subIds: Set<string> }> {
+  const localFormIds = getDeletedFormIds();
+  const localSubIds = getDeletedSubmissionIds();
+  const supabase = getSupabaseClient();
+  if (!supabase) return { formIds: localFormIds, subIds: localSubIds };
+
+  try {
+    const { data } = await supabase
+      .from('forms')
+      .select('theme_config')
+      .eq('id', SYSTEM_STATE_FORM_ID)
+      .maybeSingle();
+
+    if (data?.theme_config) {
+      let cfg: any = data.theme_config;
+      if (typeof cfg === 'string') {
+        try {
+          cfg = JSON.parse(cfg);
+        } catch {}
+      }
+      if (Array.isArray(cfg?.deleted_form_ids)) {
+        cfg.deleted_form_ids.forEach((id: string) => {
+          if (id) {
+            const clean = String(id).toLowerCase().trim();
+            localFormIds.add(clean);
+            const core = clean.replace(/^(event-form-|form-)/, '');
+            if (core) {
+              localFormIds.add(core);
+              localFormIds.add(`form-${core}`);
+              localFormIds.add(`event-form-${core}`);
+            }
+          }
+        });
+      }
+      if (Array.isArray(cfg?.deleted_submission_ids)) {
+        cfg.deleted_submission_ids.forEach((id: string) => {
+          if (id) localSubIds.add(String(id).trim());
+        });
+      }
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.DELETED_FORM_IDS, JSON.stringify(Array.from(localFormIds)));
+        localStorage.setItem(STORAGE_KEYS.DELETED_SUBMISSION_IDS, JSON.stringify(Array.from(localSubIds)));
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to sync remote deleted blacklist:', e);
+  }
+
+  return { formIds: localFormIds, subIds: localSubIds };
+}
+
+/**
+ * Record a deleted ID both locally and in the Supabase global blacklist
+ */
+export async function recordDeletedId(deletedFormId?: string, deletedSubId?: string): Promise<void> {
+  if (deletedFormId) {
+    const clean = deletedFormId.toLowerCase().trim();
+    addDeletedFormId(clean);
+    const core = clean.replace(/^(event-form-|form-)/, '');
+    if (core) {
+      addDeletedFormId(core);
+      addDeletedFormId(`form-${core}`);
+      addDeletedFormId(`event-form-${core}`);
+    }
+  }
+
+  if (deletedSubId) {
+    addDeletedSubmissionId(deletedSubId.trim());
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  try {
+    const { formIds, subIds } = await syncRemoteDeletedBlacklist();
+    if (deletedFormId) {
+      const clean = deletedFormId.toLowerCase().trim();
+      formIds.add(clean);
+      const core = clean.replace(/^(event-form-|form-)/, '');
+      if (core) {
+        formIds.add(core);
+        formIds.add(`form-${core}`);
+        formIds.add(`event-form-${core}`);
+      }
+    }
+    if (deletedSubId) {
+      subIds.add(deletedSubId.trim());
+    }
+
+    await supabase.from('forms').upsert({
+      id: SYSTEM_STATE_FORM_ID,
+      owner_id: 'system',
+      title: '__SYSTEM_STATE__',
+      slug: SYSTEM_STATE_FORM_ID,
+      status: 'draft',
+      theme_config: {
+        deleted_form_ids: Array.from(formIds),
+        deleted_submission_ids: Array.from(subIds),
+        updated_at: new Date().toISOString(),
+      },
+    });
+  } catch (e) {
+    console.warn('Failed to record deleted ID to Supabase:', e);
+  }
+}
+
+/**
+ * Check if a form or form identifier is marked as deleted in the system
+ */
+export const isDeletedForm = (f: any, deletedIds?: Set<string>): boolean => {
+  if (isSystemForm(f)) return true;
+  const ids = deletedIds || getDeletedFormIds();
+  const fId = (f?.id || '').toLowerCase().trim();
+  const fSlug = (f?.slug || '').toLowerCase().trim();
+  const fCore = fId.replace(/^(event-form-|form-)/, '');
+  const sCore = fSlug.replace(/^(event-form-|form-)/, '');
+  return (
+    ids.has(fId) ||
+    ids.has(fSlug) ||
+    (fCore !== '' && (ids.has(fCore) || ids.has(`form-${fCore}`) || ids.has(`event-form-${fCore}`))) ||
+    (sCore !== '' && (ids.has(sCore) || ids.has(`form-${sCore}`) || ids.has(`event-form-${sCore}`)))
+  );
+};
+
+/**
+ * Check if a submission is marked as deleted or belongs to a deleted form
+ */
+export const isDeletedSubmission = (
+  s: any,
+  deletedSubIds?: Set<string>,
+  deletedFormIds?: Set<string>
+): boolean => {
+  if (!s || !s.id) return true;
+  const subIds = deletedSubIds || getDeletedSubmissionIds();
+  if (subIds.has(String(s.id).trim())) return true;
+  if (s.form_id) {
+    const formIds = deletedFormIds || getDeletedFormIds();
+    const sFormId = String(s.form_id).toLowerCase().trim();
+    const sCore = sFormId.replace(/^(event-form-|form-)/, '');
+    if (
+      formIds.has(sFormId) ||
+      (sCore !== '' && (formIds.has(sCore) || formIds.has(`form-${sCore}`) || formIds.has(`event-form-${sCore}`)))
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
 /**
  * Parse registration deadline string with timezone and date-boundary awareness (Task 32)
  */
@@ -85,12 +246,17 @@ function initializeStorage() {
   if (!existingForms) {
     localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify([]));
   } else {
-    // Purge dummy fallback forms from localStorage
+    // Purge dummy fallback forms, system forms, and deleted forms from localStorage
     try {
       const parsed: Form[] = JSON.parse(existingForms);
       if (Array.isArray(parsed)) {
+        const deletedIds = getDeletedFormIds();
         const cleaned = parsed.filter(
-          (f) => !f.id.startsWith('form-fallback-')
+          (f) =>
+            !isSystemForm(f) &&
+            !f.id.startsWith('form-fallback-') &&
+            !deletedIds.has(f.id.toLowerCase()) &&
+            !deletedIds.has((f.slug || '').toLowerCase())
         );
         if (cleaned.length !== parsed.length) {
           localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(cleaned));
@@ -299,7 +465,8 @@ export class StorageService {
    * Fetch all forms - seamlessly merges Supabase remote and local storage
    */
   static async getForms(): Promise<Form[]> {
-    const deletedIds = getDeletedFormIds();
+    // 0. Synchronize remote deleted blacklist from Supabase first
+    const { formIds: deletedIds } = await syncRemoteDeletedBlacklist();
 
     // 1. Read locally cached forms
     let localForms: Form[] = [];
@@ -309,11 +476,14 @@ export class StorageService {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           localForms = parsed
-            .filter((f: Form) => !deletedIds.has(f.id))
+            .filter((f: Form) => !isDeletedForm(f, deletedIds))
             .map((f: Form) => ({
               ...f,
               theme_config: parseThemeConfig(f.theme_config),
             }));
+          if (localForms.length !== parsed.length) {
+            localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(localForms));
+          }
         }
       }
     } catch (e) {
@@ -330,7 +500,7 @@ export class StorageService {
 
         if (!error && data) {
           const supabaseForms = data
-            .filter((f: any) => !deletedIds.has(f.id))
+            .filter((f: any) => !isDeletedForm(f, deletedIds))
             .map((f: any) => ({
               ...f,
               theme_config: parseThemeConfig(f.theme_config),
@@ -345,7 +515,7 @@ export class StorageService {
           }
 
           for (const lf of localForms) {
-            if (deletedIds.has(lf.id)) continue;
+            if (isDeletedForm(lf, deletedIds)) continue;
             const existing = map.get(lf.id) || (lf.slug ? map.get(lf.slug.toLowerCase()) : undefined);
             if (!existing) {
               map.set(lf.id, lf);
@@ -359,7 +529,7 @@ export class StorageService {
             }
           }
 
-          const unique = Array.from(new Set(Array.from(map.values()))).filter((f) => !deletedIds.has(f.id));
+          const unique = Array.from(new Set(Array.from(map.values()))).filter((f) => !isDeletedForm(f, deletedIds));
           try {
             localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(unique));
           } catch {}
@@ -370,7 +540,7 @@ export class StorageService {
       }
     }
 
-    return localForms.filter((f) => !deletedIds.has(f.id));
+    return localForms.filter((f) => !isDeletedForm(f, deletedIds));
   }
 
   /**
@@ -465,16 +635,25 @@ export class StorageService {
    * Fetch a single form by unique slug or ID (prioritizes remote server to prevent stale mobile cache)
    */
   static async getFormBySlug(slug: string): Promise<Form | null> {
-    const deletedIds = getDeletedFormIds();
+    const { formIds: deletedIds } = await syncRemoteDeletedBlacklist();
     const cleanSlug = decodeURIComponent(slug.trim()).toLowerCase().replace(/\/+$/, '');
     const coreSlug = cleanSlug.replace(/^(event-form-|form-)/, '');
+
+    const isDeletedCandidate = (idOrSlug: string): boolean => {
+      if (!idOrSlug) return false;
+      return isDeletedForm({ id: idOrSlug, slug: idOrSlug }, deletedIds);
+    };
+
+    if (isDeletedCandidate(cleanSlug) || (coreSlug && isDeletedCandidate(coreSlug))) {
+      return null;
+    }
 
     // 0. Extract self-contained form definition from URL payload (?d=...)
     // This guarantees immediate, 100% reliable loading on any mobile phone from QR code or shared link
     const urlPayload = getFormPayloadFromUrl();
     if (urlPayload) {
       const unpacked = unpackFormFromUrlPayload(urlPayload);
-      if (unpacked && !deletedIds.has(unpacked.id)) {
+      if (unpacked && !isDeletedForm(unpacked, deletedIds)) {
         this.updateLocalFormCache(unpacked);
         return unpacked;
       }
@@ -497,7 +676,7 @@ export class StorageService {
 
     const localFound = localForms.find(
       (f) =>
-        !deletedIds.has(f.id) &&
+        !isDeletedForm(f, deletedIds) &&
         (f.slug.toLowerCase() === cleanSlug ||
           f.id.toLowerCase() === cleanSlug ||
           f.slug.toLowerCase() === `event-form-${coreSlug}` ||
@@ -533,13 +712,14 @@ export class StorageService {
 
         // Try candidate slugs
         for (const s of candidateSlugs) {
+          if (isDeletedCandidate(s)) continue;
           const { data, error } = await supabase
             .from('forms')
             .select('*')
             .ilike('slug', s)
             .limit(1)
             .maybeSingle();
-          if (!error && data) {
+          if (!error && data && !isDeletedForm(data, deletedIds)) {
             formData = data;
             break;
           }
@@ -548,13 +728,14 @@ export class StorageService {
         // Try candidate IDs if slug didn't match
         if (!formData) {
           for (const id of candidateIds) {
+            if (isDeletedCandidate(id)) continue;
             const { data, error } = await supabase
               .from('forms')
               .select('*')
               .eq('id', id)
               .limit(1)
               .maybeSingle();
-            if (!error && data) {
+            if (!error && data && !isDeletedForm(data, deletedIds)) {
               formData = data;
               break;
             }
@@ -569,7 +750,7 @@ export class StorageService {
             .limit(100);
           if (allRows && Array.isArray(allRows)) {
             formData = allRows.find((r: any) => {
-              if (deletedIds.has(r.id)) return false;
+              if (isDeletedForm(r, deletedIds)) return false;
               const fs = (r.slug || '').toLowerCase();
               const fi = (r.id || '').toLowerCase();
               return (
@@ -584,7 +765,7 @@ export class StorageService {
           }
         }
 
-        if (formData && !deletedIds.has(formData.id)) {
+        if (formData && !isDeletedForm(formData, deletedIds)) {
           // Fetch fields separately to avoid PostgREST relationship embedding issues
           let fields: any[] = [];
           const { data: fieldsData } = await supabase
@@ -629,7 +810,7 @@ export class StorageService {
     // 3. Query pre-seeded forms only if not found in local user cache
     const seedFound = SAMPLE_FORMS.find(
       (f) =>
-        !deletedIds.has(f.id) &&
+        !isDeletedForm(f, deletedIds) &&
         (f.slug.toLowerCase() === cleanSlug ||
           f.id.toLowerCase() === cleanSlug ||
           f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
@@ -645,7 +826,7 @@ export class StorageService {
       const all = await this.getForms();
       const match = all.find(
         (f) =>
-          !deletedIds.has(f.id) &&
+          !isDeletedForm(f, deletedIds) &&
           f.title !== 'Event Registration Form' &&
           (f.slug.toLowerCase() === cleanSlug ||
             f.id.toLowerCase() === cleanSlug ||
@@ -710,10 +891,10 @@ export class StorageService {
       const forms: Form[] = JSON.parse(raw);
       if (!Array.isArray(forms) || forms.length === 0) return;
 
-      const deletedIds = getDeletedFormIds();
+      const { formIds: deletedIds } = await syncRemoteDeletedBlacklist();
 
       for (const form of forms) {
-        if (deletedIds.has(form.id)) continue;
+        if (isSystemForm(form) || isDeletedForm(form, deletedIds)) continue;
 
         try {
           const formPayload = {
@@ -771,19 +952,19 @@ export class StorageService {
    * Fetch a single form by ID
    */
   static async getFormById(id: string): Promise<Form | null> {
-    const deletedIds = getDeletedFormIds();
-    if (deletedIds.has(id)) return null;
+    const { formIds: deletedIds } = await syncRemoteDeletedBlacklist();
+    if (isDeletedForm({ id, slug: id }, deletedIds)) return null;
     const clean = id.trim().toLowerCase();
     const core = clean.replace(/^(event-form-|form-)/, '');
     const forms = await this.getForms();
     return (
       forms.find(
         (f) =>
-          !deletedIds.has(f.id) &&
+          !isDeletedForm(f, deletedIds) &&
           (f.id.toLowerCase() === clean ||
-            f.slug.toLowerCase() === clean ||
+            (f.slug && f.slug.toLowerCase() === clean) ||
             f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === core ||
-            f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === core)
+            (f.slug && f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === core))
       ) || null
     );
   }
@@ -925,77 +1106,116 @@ export class StorageService {
    * Delete a form and its responses
    */
   static async deleteForm(formId: string): Promise<void> {
-    // 1. Immediately blacklist form ID so it can never be fetched or resurrected
-    addDeletedFormId(formId);
+    const cleanId = (formId || '').toLowerCase().trim();
+    const coreId = cleanId.replace(/^(event-form-|form-)/, '');
+
+    // 1. Immediately blacklist form ID locally
+    addDeletedFormId(cleanId);
+    if (coreId) {
+      addDeletedFormId(coreId);
+      addDeletedFormId(`form-${coreId}`);
+      addDeletedFormId(`event-form-${coreId}`);
+    }
 
     // If form has a slug, also blacklist its slug to prevent fallback resurrection
+    let formSlug = '';
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
       if (raw) {
         const parsed: Form[] = JSON.parse(raw);
-        const f = parsed.find((item) => item.id === formId);
+        const f = parsed.find(
+          (item) => item.id === formId || (item.id && item.id.toLowerCase() === cleanId)
+        );
         if (f?.slug) {
-          addDeletedFormId(f.slug.toLowerCase());
-          addDeletedFormId(`form-${f.slug.toLowerCase()}`);
+          formSlug = f.slug.toLowerCase().trim();
+          addDeletedFormId(formSlug);
+          addDeletedFormId(`form-${formSlug}`);
+          addDeletedFormId(`event-form-${formSlug}`);
         }
       }
     } catch {
       // ignore
     }
 
-    // 2. Cascade delete associated files and records in Supabase if connected
+    // 2. Persist deletion to Supabase system blacklist so ALL devices (mobile, desktop) stay in sync!
+    await recordDeletedId(formId);
+    if (formSlug && formSlug !== cleanId) {
+      await recordDeletedId(formSlug);
+    }
+
+    // 3. Cascade delete associated files and records in Supabase if connected
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        const candidateFormIds = Array.from(
+          new Set(
+            [
+              formId,
+              cleanId,
+              coreId,
+              `form-${coreId}`,
+              `event-form-${coreId}`,
+              formSlug,
+            ].filter(Boolean)
+          )
+        );
+
         // Clean up Supabase Storage files for this form
-        const cleanFormId = formId.replace(/[^a-zA-Z0-9_-]/g, '_');
-        try {
-          const { data: files, error: listErr } = await supabase.storage
-            .from('event-uploads')
-            .list(cleanFormId);
-          if (!listErr && files && files.length > 0) {
-            const filePaths = files.map((f) => `${cleanFormId}/${f.name}`);
-            await supabase.storage.from('event-uploads').remove(filePaths);
+        for (const cid of candidateFormIds) {
+          const cleanFolder = cid.replace(/[^a-zA-Z0-9_-]/g, '_');
+          try {
+            const { data: files, error: listErr } = await supabase.storage
+              .from('event-uploads')
+              .list(cleanFolder);
+            if (!listErr && files && files.length > 0) {
+              const filePaths = files.map((f) => `${cleanFolder}/${f.name}`);
+              await supabase.storage.from('event-uploads').remove(filePaths);
+            }
+          } catch (storageErr) {
+            console.warn('Storage cleanup warning for form files:', storageErr);
           }
-        } catch (storageErr) {
-          console.warn('Storage cleanup warning for form files:', storageErr);
         }
 
         // Must delete child submissions and child fields first to satisfy foreign key constraints!
-        await supabase.from('submissions').delete().eq('form_id', formId);
-        await supabase.from('form_fields').delete().eq('form_id', formId);
-        await supabase.from('forms').delete().eq('id', formId);
+        for (const cid of candidateFormIds) {
+          await supabase.from('submissions').delete().eq('form_id', cid);
+          await supabase.from('form_fields').delete().eq('form_id', cid);
+          await supabase.from('forms').delete().eq('id', cid);
+          await supabase.from('forms').delete().ilike('slug', cid);
+        }
       } catch (e) {
         console.warn('Supabase cascade delete failed', e);
       }
     }
 
-    // 3. Remove from LocalStorage forms
+    // 4. Remove from LocalStorage forms
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.FORMS);
       if (raw) {
         const parsed: Form[] = JSON.parse(raw);
-        const filtered = parsed.filter((f) => f.id !== formId);
+        const filtered = parsed.filter((f) => !isDeletedForm(f));
         localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(filtered));
       }
     } catch (e) {
       console.warn('Local storage forms delete failed', e);
     }
 
-    // 4. Remove from LocalStorage submissions
+    // 5. Remove from LocalStorage submissions
     try {
       const rawSubs = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
       if (rawSubs) {
         const parsedSubs: Submission[] = JSON.parse(rawSubs);
-        const cleanId = formId.toLowerCase().replace(/^(event-form-|form-)/, '');
-        const filteredSubs = parsedSubs.filter((s) => {
-          const subCleanId = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
-          return s.form_id !== formId && subCleanId !== cleanId;
-        });
+        const filteredSubs = parsedSubs.filter((s) => !isDeletedSubmission(s));
         localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(filteredSubs));
       }
     } catch (e) {
       console.warn('Local storage submissions delete failed', e);
+    }
+
+    // 6. Broadcast deletion events to active windows and components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('form_deleted', { detail: formId }));
+      window.dispatchEvent(new CustomEvent('eventform_deleted', { detail: formId }));
     }
   }
 
@@ -1040,7 +1260,12 @@ export class StorageService {
    * Submissions Management
    */
   static async getAllSubmissions(): Promise<Submission[]> {
-    const deletedSubmissionIds = getDeletedSubmissionIds();
+    // 0. Synchronize remote deleted blacklists from Supabase first
+    const { formIds: deletedFormIds, subIds: deletedSubmissionIds } = await syncRemoteDeletedBlacklist();
+
+    const isDummySubmission = (s: Submission) =>
+      ['sub-1', 'sub-2', 'sub-3'].includes(s.id) &&
+      ['Rohit Verma', 'Zaheer Khan', 'Dinesh Karthik'].includes(s.applicant_name || '');
 
     // 1. Fetch remote submissions from Supabase
     let remoteList: Submission[] = [];
@@ -1053,7 +1278,9 @@ export class StorageService {
           .order('submitted_at', { ascending: false });
 
         if (!error && Array.isArray(data)) {
-          remoteList = data;
+          remoteList = data.filter(
+            (s) => !isDeletedSubmission(s, deletedSubmissionIds, deletedFormIds) && !isDummySubmission(s)
+          );
         } else if (error) {
           console.warn('Supabase submissions query error:', error.message);
         }
@@ -1067,30 +1294,34 @@ export class StorageService {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
       localList = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(localList)) {
+        localList = localList.filter(
+          (s) => !isDeletedSubmission(s, deletedSubmissionIds, deletedFormIds) && !isDummySubmission(s)
+        );
+      }
     } catch {
       localList = [];
     }
 
-    // 3. Fallback to initial sample submissions if system is completely fresh
+    // 3. Fallback to initial sample submissions ONLY if system is completely fresh and not deleted
     if (remoteList.length === 0 && localList.length === 0) {
       const hasInit = typeof window !== 'undefined' && localStorage.getItem('eventform_initialized_subs');
       if (!hasInit) {
-        localList = INITIAL_SUBMISSIONS;
+        const cleanedInit = INITIAL_SUBMISSIONS.filter(
+          (s) => !isDeletedSubmission(s, deletedSubmissionIds, deletedFormIds) && !isDummySubmission(s)
+        );
+        localList = cleanedInit;
         try {
-          localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(INITIAL_SUBMISSIONS));
+          localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(cleanedInit));
           localStorage.setItem('eventform_initialized_subs', 'true');
         } catch {}
       }
     }
 
-    const isDummySubmission = (s: Submission) =>
-      ['sub-1', 'sub-2', 'sub-3'].includes(s.id) &&
-      ['Rohit Verma', 'Zaheer Khan', 'Dinesh Karthik'].includes(s.applicant_name || '');
-
     // 4. Merge remote and local submissions deduplicated by ID
     const mergedMap = new Map<string, Submission>();
     for (const s of remoteList) {
-      if (!deletedSubmissionIds.has(s.id) && !isDummySubmission(s)) {
+      if (!isDeletedSubmission(s, deletedSubmissionIds, deletedFormIds) && !isDummySubmission(s)) {
         const normS: Submission = {
           ...s,
           admin_notes: s.admin_notes || (s.submission_data?._admin_notes as string) || '',
@@ -1099,7 +1330,7 @@ export class StorageService {
       }
     }
     for (const s of localList) {
-      if (!deletedSubmissionIds.has(s.id) && !isDummySubmission(s)) {
+      if (!isDeletedSubmission(s, deletedSubmissionIds, deletedFormIds) && !isDummySubmission(s)) {
         if (!mergedMap.has(s.id)) {
           const normS: Submission = {
             ...s,
@@ -1114,7 +1345,7 @@ export class StorageService {
       (a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
     );
 
-    // Keep LocalStorage up to date with merged list
+    // Keep LocalStorage up to date with clean merged list
     try {
       localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(mergedList));
     } catch {}
@@ -1122,13 +1353,16 @@ export class StorageService {
     // 5. Asynchronously sync any local-only entries to Supabase in the background
     if (supabase && localList.length > 0) {
       const remoteIds = new Set(remoteList.map((r) => r.id));
-      const missingRemote = localList.filter((l) => !remoteIds.has(l.id) && !deletedSubmissionIds.has(l.id));
+      const missingRemote = localList.filter(
+        (l) => !remoteIds.has(l.id) && !isDeletedSubmission(l, deletedSubmissionIds, deletedFormIds)
+      );
       if (missingRemote.length > 0) {
         (async () => {
           for (const item of missingRemote) {
             try {
-              // Ensure parent form row exists first to prevent foreign key errors
-              // NEVER overwrite existing form's title, slug, status, or fields!
+              if (isDeletedSubmission(item, deletedSubmissionIds, deletedFormIds)) continue;
+
+              // Ensure parent form row exists and is NOT deleted
               const { data: existingFormRow } = await supabase
                 .from('forms')
                 .select('id')
@@ -1138,9 +1372,14 @@ export class StorageService {
               if (!existingFormRow) {
                 const rawForms = localStorage.getItem(STORAGE_KEYS.FORMS);
                 const localListForms: Form[] = rawForms ? JSON.parse(rawForms) : [];
-                const localFormMatch = localListForms.find((f) => f.id === item.form_id);
+                const localFormMatch = localListForms.find(
+                  (f) => f.id === item.form_id && !isDeletedForm(f, deletedFormIds)
+                );
                 if (localFormMatch) {
                   await StorageService.saveForm(localFormMatch);
+                } else {
+                  // Parent form is missing or deleted, do NOT sync orphaned submission
+                  continue;
                 }
               }
               await supabase.from('submissions').insert([
@@ -1569,10 +1808,13 @@ export class StorageService {
   }
 
   static async deleteSubmission(submissionId: string): Promise<void> {
-    // 1. Immediately blacklist submission ID
+    // 1. Immediately blacklist submission ID locally
     addDeletedSubmissionId(submissionId);
 
-    // 2. Clean up files and record from Supabase
+    // 2. Persist deletion to Supabase system blacklist so ALL devices stay in sync!
+    await recordDeletedId(undefined, submissionId);
+
+    // 3. Clean up files and record from Supabase
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -1581,7 +1823,7 @@ export class StorageService {
           .from('submissions')
           .select('submission_data')
           .eq('id', submissionId)
-          .single();
+          .maybeSingle();
 
         if (subData?.submission_data) {
           const urls = Object.values(subData.submission_data).filter(
@@ -1603,16 +1845,21 @@ export class StorageService {
       }
     }
 
-    // 3. Remove from LocalStorage
+    // 4. Remove from LocalStorage
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
       if (raw) {
         const parsed: Submission[] = JSON.parse(raw);
-        const filtered = parsed.filter((s) => s.id !== submissionId);
+        const filtered = parsed.filter((s) => s.id !== submissionId && !isDeletedSubmission(s));
         localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(filtered));
       }
     } catch (e) {
       console.warn('Local storage submissions delete failed', e);
+    }
+
+    // 5. Broadcast deletion event to active components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('submission_deleted', { detail: submissionId }));
     }
   }
 
@@ -1777,6 +2024,8 @@ WITH CHECK (bucket_id = 'event-assets');
 
 export function isSubmissionForForm(sub: Submission, form: Form): boolean {
   if (!sub || !form) return false;
+  if (isSystemForm(form) || isDeletedForm(form)) return false;
+  if (isDeletedSubmission(sub)) return false;
   if (sub.form_id === form.id) return true;
   if (form.slug && sub.form_id.toLowerCase() === form.slug.toLowerCase()) return true;
 
