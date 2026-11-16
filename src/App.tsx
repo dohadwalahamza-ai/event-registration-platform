@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Form, Submission, DashboardStats } from './types';
 import { StorageService, isSubmissionForForm, isSystemForm, packFormToUrlPayload } from './services/storage';
 import { getSupabaseClient } from './services/supabaseClient';
@@ -333,6 +333,11 @@ function AppContent() {
     loadData();
   }, []);
 
+  const formsRef = useRef(forms);
+  formsRef.current = forms;
+  const submissionsRef = useRef(submissions);
+  submissionsRef.current = submissions;
+
   // Listen for real-time submission creations across windows, mobile devices, and Supabase WebSockets
   useEffect(() => {
     const handleSubmissionCreated = (e: any) => {
@@ -341,12 +346,12 @@ function AppContent() {
         setSubmissions((prev) => {
           if (prev.some((s) => s.id === newSub.id)) return prev;
           const next = [newSub, ...prev];
-          setStats(StorageService.computeDashboardStats(forms, next));
+          setStats(StorageService.computeDashboardStats(formsRef.current, next));
           return next;
         });
 
         // Trigger privacy-safe desktop notification
-        const matchedForm = forms.find((f) => isSubmissionForForm(newSub, f));
+        const matchedForm = formsRef.current.find((f: Form) => isSubmissionForForm(newSub, f));
         sendSubmissionNotification({
           submissionId: newSub.id,
           formTitle: matchedForm?.title || 'Event Form',
@@ -364,15 +369,17 @@ function AppContent() {
       const deletedId = e.detail;
       if (deletedId) {
         const cleanId = String(deletedId).toLowerCase().replace(/^(event-form-|form-)/, '');
-        const nextForms = forms.filter((f) => f.id !== deletedId && f.id.toLowerCase() !== deletedId.toLowerCase());
-        setForms(nextForms);
-        setSubmissions((prev) => {
-          const nextSubs = prev.filter((s) => {
-            const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
-            return s.form_id !== deletedId && subClean !== cleanId;
+        setForms((prevForms) => {
+          const nextForms = prevForms.filter((f) => f.id !== deletedId && f.id.toLowerCase() !== deletedId.toLowerCase());
+          setSubmissions((prevSubs) => {
+            const nextSubs = prevSubs.filter((s) => {
+              const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+              return s.form_id !== deletedId && subClean !== cleanId;
+            });
+            setStats(StorageService.computeDashboardStats(nextForms, nextSubs));
+            return nextSubs;
           });
-          setStats(StorageService.computeDashboardStats(nextForms, nextSubs));
-          return nextSubs;
+          return nextForms;
         });
       }
     };
@@ -382,7 +389,7 @@ function AppContent() {
       if (deletedSubId) {
         setSubmissions((prev) => {
           const nextSubs = prev.filter((s) => s.id !== deletedSubId);
-          setStats(StorageService.computeDashboardStats(forms, nextSubs));
+          setStats(StorageService.computeDashboardStats(formsRef.current, nextSubs));
           return nextSubs;
         });
       }
@@ -395,13 +402,13 @@ function AppContent() {
       if (e.key === 'eventform_submissions_v1') {
         StorageService.getAllSubmissions().then((subs) => {
           setSubmissions(subs);
-          setStats(StorageService.computeDashboardStats(forms, subs));
+          setStats(StorageService.computeDashboardStats(formsRef.current, subs));
         }).catch(() => {});
       }
       if (e.key === 'eventform_forms_v1' || e.key === 'eventform_deleted_ids_v1') {
         StorageService.getForms().then((freshForms) => {
           setForms(freshForms);
-          setStats(StorageService.computeDashboardStats(freshForms, submissions));
+          setStats(StorageService.computeDashboardStats(freshForms, submissionsRef.current));
         }).catch(() => {});
       }
     };
@@ -413,21 +420,21 @@ function AppContent() {
         setSubmissions((prev) => {
           if (prev.some((s) => s.id === newSub.id)) return prev;
           const next = [newSub, ...prev];
-          setStats(StorageService.computeDashboardStats(forms, next));
+          setStats(StorageService.computeDashboardStats(formsRef.current, next));
           return next;
         });
       },
       (updatedSub) => {
         setSubmissions((prev) => {
           const next = prev.map((s) => (s.id === updatedSub.id ? updatedSub : s));
-          setStats(StorageService.computeDashboardStats(forms, next));
+          setStats(StorageService.computeDashboardStats(formsRef.current, next));
           return next;
         });
       },
       (deletedId) => {
         setSubmissions((prev) => {
           const next = prev.filter((s) => s.id !== deletedId);
-          setStats(StorageService.computeDashboardStats(forms, next));
+          setStats(StorageService.computeDashboardStats(formsRef.current, next));
           return next;
         });
       }
@@ -440,7 +447,7 @@ function AppContent() {
       window.removeEventListener('storage', handleStorageChange);
       unsubscribeRealtime();
     };
-  }, [forms, submissions]);
+  }, []);
 
   // Refresh submissions only on initial tab access if empty
   useEffect(() => {
@@ -462,8 +469,6 @@ function AppContent() {
 
     let isCancelled = false;
     setIsPublicLoading(true);
-    // Purge stale form cache so no previous forms linger on mobile
-    StorageService.clearStaleFormCache(publicSlug);
 
     StorageService.getFormBySlug(publicSlug)
       .then((form) => {

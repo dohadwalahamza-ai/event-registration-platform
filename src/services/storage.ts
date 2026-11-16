@@ -91,12 +91,24 @@ export const isSystemForm = (f: any): boolean => {
   return id === SYSTEM_STATE_FORM_ID || id.startsWith('__');
 };
 
+let cachedBlacklistInMemory: { formIds: Set<string>; subIds: Set<string>; timestamp: number } | null = null;
+const BLACKLIST_CACHE_TTL_MS = 60000; // 60s cache to avoid repeated pinging for deleted blacklist
+
 /**
  * Fetch remote deleted blacklist from Supabase to keep all devices (mobile, desktop) in sync
  */
-export async function syncRemoteDeletedBlacklist(): Promise<{ formIds: Set<string>; subIds: Set<string> }> {
+export async function syncRemoteDeletedBlacklist(force = false): Promise<{ formIds: Set<string>; subIds: Set<string> }> {
   const localFormIds = getDeletedFormIds();
   const localSubIds = getDeletedSubmissionIds();
+
+  if (!force && cachedBlacklistInMemory && Date.now() - cachedBlacklistInMemory.timestamp < BLACKLIST_CACHE_TTL_MS) {
+    // Return fast in-memory copy
+    return {
+      formIds: new Set([...cachedBlacklistInMemory.formIds, ...localFormIds]),
+      subIds: new Set([...cachedBlacklistInMemory.subIds, ...localSubIds]),
+    };
+  }
+
   const supabase = getSupabaseClient();
   if (!supabase) return { formIds: localFormIds, subIds: localSubIds };
 
@@ -163,6 +175,12 @@ export async function syncRemoteDeletedBlacklist(): Promise<{ formIds: Set<strin
     console.warn('Failed to sync remote deleted blacklist:', e);
   }
 
+  cachedBlacklistInMemory = {
+    formIds: new Set(localFormIds),
+    subIds: new Set(localSubIds),
+    timestamp: Date.now(),
+  };
+
   return { formIds: localFormIds, subIds: localSubIds };
 }
 
@@ -170,6 +188,7 @@ export async function syncRemoteDeletedBlacklist(): Promise<{ formIds: Set<strin
  * Record a deleted ID both locally and in the Supabase global blacklist
  */
 export async function recordDeletedId(deletedFormId?: string, deletedSubId?: string): Promise<void> {
+  cachedBlacklistInMemory = null;
   if (deletedFormId) {
     const clean = deletedFormId.toLowerCase().trim();
     addDeletedFormId(clean);
@@ -532,11 +551,45 @@ function sanitizeTimestamp(val: any): string | null {
 
 let cachedFormsInMemory: { data: Form[]; timestamp: number } | null = null;
 let cachedSubsInMemory: { data: Submission[]; timestamp: number } | null = null;
+const cachedFormSubsInMemory = new Map<string, { data: Submission[]; timestamp: number }>();
+const publicFormCache = new Map<string, { form: Form; timestamp: number }>();
 const CACHE_TTL_MS = 15000; // 15s in-memory TTL to prevent redundant Supabase bandwidth egress
+const PUBLIC_FORM_CACHE_TTL_MS = 5 * 60 * 1000; // 5m isolated cache for public forms
+
+export const FORM_QUERY_COLUMNS =
+  'id, owner_id, title, slug, description, cover_image_url, event_date, event_end_date, venue, status, registration_deadline, theme_config, presentation_mode, success_message, redirect_url, published_version, created_at, updated_at, fields:form_fields(id, form_id, field_key, label, field_type, description, placeholder, required, default_value, options, validation_rules, conditional_rules, sort_order, configuration)';
+
+export function invalidatePublicFormCache(formId?: string, slug?: string): void {
+  if (formId) {
+    const cleanId = String(formId).toLowerCase().trim();
+    const coreId = cleanId.replace(/^(event-form-|form-)/, '');
+    publicFormCache.delete(cleanId);
+    publicFormCache.delete(`form_${cleanId}`);
+    if (coreId) {
+      publicFormCache.delete(coreId);
+      publicFormCache.delete(`form_${coreId}`);
+      publicFormCache.delete(`event-form-${coreId}`);
+      publicFormCache.delete(`form-${coreId}`);
+    }
+  }
+  if (slug) {
+    const cleanSlug = String(slug).toLowerCase().trim();
+    const coreSlug = cleanSlug.replace(/^(event-form-|form-)/, '');
+    publicFormCache.delete(cleanSlug);
+    publicFormCache.delete(`form_${cleanSlug}`);
+    if (coreSlug) {
+      publicFormCache.delete(coreSlug);
+      publicFormCache.delete(`form_${coreSlug}`);
+    }
+  }
+}
 
 export function invalidateStorageCache(): void {
   cachedFormsInMemory = null;
   cachedSubsInMemory = null;
+  cachedFormSubsInMemory.clear();
+  cachedBlacklistInMemory = null;
+  publicFormCache.clear();
 }
 
 export class StorageService {
@@ -578,7 +631,7 @@ export class StorageService {
       try {
         const { data, error } = await supabase
           .from('forms')
-          .select('*, fields:form_fields(*)')
+          .select(FORM_QUERY_COLUMNS)
           .order('created_at', { ascending: false });
 
         if (!error && data) {
@@ -746,12 +799,20 @@ export class StorageService {
       return null;
     }
 
-    // 0. Extract self-contained form definition from URL payload (?d=...)
+    // 0. Check isolated in-memory cache for this specific form ID / slug
+    const cachedEntry = publicFormCache.get(cleanSlug) || (coreSlug ? publicFormCache.get(coreSlug) : null);
+    if (cachedEntry && Date.now() - cachedEntry.timestamp < PUBLIC_FORM_CACHE_TTL_MS) {
+      return cachedEntry.form;
+    }
+
+    // 0b. Extract self-contained form definition from URL payload (?d=...)
     // This guarantees immediate, 100% reliable loading on any mobile phone from QR code or shared link
     const urlPayload = getFormPayloadFromUrl();
     if (urlPayload) {
       const unpacked = unpackFormFromUrlPayload(urlPayload);
       if (unpacked && !isDeletedForm(unpacked, deletedIds)) {
+        publicFormCache.set(cleanSlug, { form: unpacked, timestamp: Date.now() });
+        if (coreSlug) publicFormCache.set(coreSlug, { form: unpacked, timestamp: Date.now() });
         this.updateLocalFormCache(unpacked);
         return unpacked;
       }
@@ -784,104 +845,40 @@ export class StorageService {
           f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
     );
 
-    // 1. ALWAYS query Supabase remote database FIRST if connected
-    // This guarantees that mobile browsers and external respondents get the fresh live version
+    // 1. Single, targeted PostgREST query to Supabase (replaces previous 10-query waterfall)
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        const candidateSlugs = Array.from(
-          new Set([
-            cleanSlug,
-            coreSlug,
-            `event-form-${coreSlug}`,
-            `form-${coreSlug}`,
-          ])
-        );
-        const candidateIds = Array.from(
-          new Set([
-            cleanSlug,
-            `form-${cleanSlug}`,
-            `form-${coreSlug}`,
-            coreSlug,
-          ])
-        );
-
-        let formData: any = null;
-
-        // Try candidate slugs
-        for (const s of candidateSlugs) {
-          if (isDeletedCandidate(s)) continue;
-          const { data, error } = await supabase
-            .from('forms')
-            .select('*')
-            .ilike('slug', s)
-            .limit(1)
-            .maybeSingle();
-          if (!error && data && !isDeletedForm(data, deletedIds)) {
-            formData = data;
-            break;
-          }
+        const candidateFilters = [
+          `slug.ilike.${cleanSlug}`,
+          `id.eq.${cleanSlug}`,
+        ];
+        if (coreSlug && coreSlug !== cleanSlug) {
+          candidateFilters.push(`slug.ilike.${coreSlug}`);
+          candidateFilters.push(`slug.ilike.event-form-${coreSlug}`);
+          candidateFilters.push(`slug.ilike.form-${coreSlug}`);
+          candidateFilters.push(`id.eq.form-${coreSlug}`);
+          candidateFilters.push(`id.eq.${coreSlug}`);
         }
 
-        // Try candidate IDs if slug didn't match
-        if (!formData) {
-          for (const id of candidateIds) {
-            if (isDeletedCandidate(id)) continue;
-            const { data, error } = await supabase
-              .from('forms')
-              .select('*')
-              .eq('id', id)
-              .limit(1)
-              .maybeSingle();
-            if (!error && data && !isDeletedForm(data, deletedIds)) {
-              formData = data;
-              break;
-            }
-          }
-        }
+        const { data, error } = await supabase
+          .from('forms')
+          .select(FORM_QUERY_COLUMNS)
+          .or(candidateFilters.join(','))
+          .limit(1)
+          .maybeSingle();
 
-        // Exact fallback search in Supabase if specific candidate didn't match
-        if (!formData) {
-          const { data: allRows } = await supabase
-            .from('forms')
-            .select('*')
-            .limit(100);
-          if (allRows && Array.isArray(allRows)) {
-            formData = allRows.find((r: any) => {
-              if (isDeletedForm(r, deletedIds)) return false;
-              const fs = (r.slug || '').toLowerCase();
-              const fi = (r.id || '').toLowerCase();
-              return (
-                fs === cleanSlug ||
-                fi === cleanSlug ||
-                fs === `event-form-${coreSlug}` ||
-                fi === `form-${coreSlug}` ||
-                fs.replace(/^(event-form-|form-)/, '') === coreSlug ||
-                fi.replace(/^(event-form-|form-)/, '') === coreSlug
-              );
-            });
-          }
-        }
+        if (!error && data && !isDeletedForm(data, deletedIds)) {
+          const parsedSupaTheme = parseThemeConfig(data.theme_config);
+          const fields = Array.isArray(data.fields)
+            ? data.fields.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+            : [];
 
-        if (formData && !isDeletedForm(formData, deletedIds)) {
-          // Fetch fields separately to avoid PostgREST relationship embedding issues
-          let fields: any[] = [];
-          const { data: fieldsData } = await supabase
-            .from('form_fields')
-            .select('*')
-            .eq('form_id', formData.id)
-            .order('sort_order', { ascending: true });
-
-          if (fieldsData && Array.isArray(fieldsData)) {
-            fields = fieldsData;
-          }
-
-          const parsedSupaTheme = parseThemeConfig(formData.theme_config);
           const supaForm: Form = {
-            ...formData,
+            ...data,
             theme_config: parsedSupaTheme,
-            presentation_mode: formData.presentation_mode || parsedSupaTheme.presentationMode || 'step_by_step',
-            fields: fields.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)),
+            presentation_mode: data.presentation_mode || parsedSupaTheme.presentationMode || 'step_by_step',
+            fields,
           };
 
           // If local cache has a newer version than remote Supabase, prefer local user changes
@@ -889,11 +886,15 @@ export class StorageService {
             const localTime = new Date(localFound.updated_at || 0).getTime();
             const supaTime = new Date(supaForm.updated_at || 0).getTime();
             if (localTime >= supaTime) {
+              publicFormCache.set(cleanSlug, { form: localFound, timestamp: Date.now() });
+              if (coreSlug) publicFormCache.set(coreSlug, { form: localFound, timestamp: Date.now() });
               return localFound;
             }
           }
 
-          // Otherwise synchronize fresh remote version into local storage
+          // Otherwise synchronize fresh remote version into local storage & cache
+          publicFormCache.set(cleanSlug, { form: supaForm, timestamp: Date.now() });
+          if (coreSlug) publicFormCache.set(coreSlug, { form: supaForm, timestamp: Date.now() });
           this.updateLocalFormCache(supaForm);
           return supaForm;
         }
@@ -903,7 +904,11 @@ export class StorageService {
     }
 
     // 2. Query locally cached forms if Supabase is offline or didn't return a newer match
-    if (localFound) return localFound;
+    if (localFound) {
+      publicFormCache.set(cleanSlug, { form: localFound, timestamp: Date.now() });
+      if (coreSlug) publicFormCache.set(coreSlug, { form: localFound, timestamp: Date.now() });
+      return localFound;
+    }
 
     // 3. Query pre-seeded forms only if not found in local user cache
     const seedFound = SAMPLE_FORMS.find(
@@ -915,6 +920,8 @@ export class StorageService {
           f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
     );
     if (seedFound) {
+      publicFormCache.set(cleanSlug, { form: seedFound, timestamp: Date.now() });
+      if (coreSlug) publicFormCache.set(coreSlug, { form: seedFound, timestamp: Date.now() });
       this.updateLocalFormCache(seedFound);
       return seedFound;
     }
@@ -966,10 +973,17 @@ export class StorageService {
     }
   }
 
+  private static lastLocalFormsSyncTime = 0;
+
   /**
-   * Automatically synchronize all locally cached forms to remote Supabase database
+   * Automatically synchronize all locally cached forms to remote Supabase database (debounced to avoid startup bursts)
    */
-  static async syncLocalFormsToRemote(): Promise<void> {
+  static async syncLocalFormsToRemote(force = false): Promise<void> {
+    if (!force && Date.now() - StorageService.lastLocalFormsSyncTime < 10 * 60 * 1000) {
+      return;
+    }
+    StorageService.lastLocalFormsSyncTime = Date.now();
+
     const supabase = getSupabaseClient();
     if (!supabase || typeof window === 'undefined') return;
 
@@ -1062,6 +1076,7 @@ export class StorageService {
    */
   static async saveForm(form: Form): Promise<Form> {
     invalidateStorageCache();
+    invalidatePublicFormCache(form.id, form.slug);
     const parsedTheme = parseThemeConfig(form.theme_config);
     const resolvedPresentationMode =
       form.presentation_mode || parsedTheme.presentationMode || 'step_by_step';
@@ -1196,6 +1211,7 @@ export class StorageService {
    */
   static async deleteForm(formId: string): Promise<void> {
     invalidateStorageCache();
+    invalidatePublicFormCache(formId);
     const cleanId = (formId || '').toLowerCase().trim();
     const coreId = cleanId.replace(/^(event-form-|form-)/, '');
 
@@ -1368,8 +1384,9 @@ export class StorageService {
       try {
         const { data, error } = await supabase
           .from('submissions')
-          .select('*')
-          .order('submitted_at', { ascending: false });
+          .select('id, form_id, form_version, applicant_name, applicant_email, submission_data, submitted_at, status, admin_notes')
+          .order('submitted_at', { ascending: false })
+          .limit(300);
 
         if (!error && Array.isArray(data)) {
           remoteList = data.filter(
@@ -1612,14 +1629,95 @@ export class StorageService {
     }
   }
 
-  static async getSubmissionsForForm(formId: string): Promise<Submission[]> {
-    const all = await this.getAllSubmissions();
-    const cleanId = formId.toLowerCase().replace(/^(event-form-|form-)/, '');
-    return all.filter((s) => {
-      if (s.form_id === formId) return true;
-      const cleanSub = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
-      return cleanSub !== '' && cleanSub === cleanId;
-    });
+  static async getSubmissionsForForm(
+    formId: string,
+    options: { forceFresh?: boolean; limit?: number; offset?: number } = {}
+  ): Promise<Submission[]> {
+    const cleanId = (formId || '').toLowerCase().trim();
+    const coreId = cleanId.replace(/^(event-form-|form-)/, '');
+
+    const cacheKey = `subs_${cleanId}`;
+    if (!options.forceFresh && cachedFormSubsInMemory.has(cacheKey)) {
+      const entry = cachedFormSubsInMemory.get(cacheKey)!;
+      if (Date.now() - entry.timestamp < CACHE_TTL_MS) {
+        return entry.data;
+      }
+    }
+
+    const { subIds: deletedSubmissionIds, formIds: deletedFormIds } = await syncRemoteDeletedBlacklist();
+
+    const isDummySubmission = (s: Submission) =>
+      ['sub-1', 'sub-2', 'sub-3'].includes(s.id) &&
+      ['Rohit Verma', 'Zaheer Khan', 'Dinesh Karthik'].includes(s.applicant_name || '');
+
+    let remoteList: Submission[] = [];
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const filters = [
+          `form_id.eq.${cleanId}`,
+          `form_id.eq.${formId}`,
+        ];
+        if (coreId && coreId !== cleanId) {
+          filters.push(`form_id.eq.form-${coreId}`);
+          filters.push(`form_id.eq.event-form-${coreId}`);
+          filters.push(`form_id.eq.${coreId}`);
+        }
+
+        let query = supabase
+          .from('submissions')
+          .select('id, form_id, form_version, applicant_name, applicant_email, submission_data, submitted_at, status, admin_notes')
+          .or(filters.join(','))
+          .order('submitted_at', { ascending: false });
+
+        if (options.limit) {
+          const from = options.offset || 0;
+          const to = from + options.limit - 1;
+          query = query.range(from, to);
+        }
+
+        const { data, error } = await query;
+        if (!error && Array.isArray(data)) {
+          remoteList = data.filter(
+            (s) => !isDeletedSubmission(s, deletedSubmissionIds, deletedFormIds) && !isDummySubmission(s)
+          );
+        }
+      } catch (err) {
+        console.warn('Supabase form submissions query error, using local fallback:', err);
+      }
+    }
+
+    // Merge with local submissions for this form
+    let localList: Submission[] = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+      if (raw) {
+        const parsed: Submission[] = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          localList = parsed.filter(
+            (s) => {
+              if (isDeletedSubmission(s, deletedSubmissionIds, deletedFormIds) || isDummySubmission(s)) return false;
+              const sf = (s.form_id || '').toLowerCase();
+              const sCore = sf.replace(/^(event-form-|form-)/, '');
+              return sf === cleanId || sf === formId.toLowerCase() || sCore === coreId;
+            }
+          );
+        }
+      }
+    } catch {}
+
+    const map = new Map<string, Submission>();
+    for (const r of remoteList) map.set(r.id, r);
+    for (const l of localList) {
+      if (!map.has(l.id)) map.set(l.id, l);
+    }
+
+    const merged = Array.from(map.values()).sort(
+      (a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+    );
+
+    cachedFormSubsInMemory.set(cacheKey, { data: merged, timestamp: Date.now() });
+    return merged;
   }
 
   static async submitRegistration(
@@ -1632,21 +1730,27 @@ export class StorageService {
     const applicantName = data.full_name || data.applicant_name || data.name || data.team_name || 'Participant';
     const applicantEmail = data.email || data.contact_email || '';
 
-    // Normalize form ID to canonical form if present
+    // Normalize form ID to canonical form if present without fetching all forms from Supabase
     let resolvedFormId = formId;
     let resolvedFormTitle = formTitle || 'Event Form';
     try {
-      const allForms = await this.getForms();
-      const matched = allForms.find(
-        (f) =>
-          f.id === formId ||
-          f.slug === formId ||
-          f.id.replace(/^(event-form-|form-)/, '') === formId.replace(/^(event-form-|form-)/, '') ||
-          f.slug.replace(/^(event-form-|form-)/, '') === formId.replace(/^(event-form-|form-)/, '')
-      );
+      let matched = publicFormCache.get(formId)?.form;
+      if (!matched) {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.FORMS) : null;
+        if (raw) {
+          const allForms: Form[] = JSON.parse(raw);
+          matched = allForms.find(
+            (f) =>
+              f.id === formId ||
+              f.slug === formId ||
+              f.id.replace(/^(event-form-|form-)/, '') === formId.replace(/^(event-form-|form-)/, '') ||
+              f.slug.replace(/^(event-form-|form-)/, '') === formId.replace(/^(event-form-|form-)/, '')
+          );
+        }
+      }
       if (matched) {
         resolvedFormId = matched.id;
-        resolvedFormTitle = matched.title;
+        resolvedFormTitle = matched.title || resolvedFormTitle;
 
         // Block closed, offline, or draft forms from accepting submissions
         if (matched.status === 'closed') {
@@ -1656,8 +1760,6 @@ export class StorageService {
           throw new Error('This form is currently offline. Submissions are not being accepted at this time.');
         }
         if (isFormExpired(matched)) {
-          // Asynchronously transition form in database
-          this.checkAndTransitionExpiredForms().catch(() => {});
           throw new Error('The registration deadline for this event has passed. No further registrations are being accepted.');
         }
       }
@@ -1859,6 +1961,7 @@ export class StorageService {
           .from('event-uploads')
           .upload(storagePath, fileOrBlob, {
             contentType: mime,
+            cacheControl: '31536000, public, immutable',
             upsert: true,
           });
 

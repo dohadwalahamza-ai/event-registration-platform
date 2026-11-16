@@ -769,6 +769,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
               <img
                 src={bannerImageUrl}
                 alt={form.title}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover filter brightness-90"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent" />
@@ -978,6 +980,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({
             <img
               src={bannerImageUrl}
               alt={form.title}
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover object-center transform group-hover:scale-105 transition-transform duration-700"
               onError={(e) => {
                 // Guaranteed fallback image on broken network link

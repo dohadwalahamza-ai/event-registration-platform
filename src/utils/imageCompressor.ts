@@ -65,8 +65,22 @@ export function validatePhotoUpload(file: File | { size: number; type: string; n
 }
 
 /**
+ * Detects whether the current browser supports canvas WebP export
+ */
+export function isWebpSupported(): boolean {
+  if (typeof document === 'undefined') return false;
+  try {
+    const canvas = document.createElement('canvas');
+    return canvas.toDataURL('image/webp').startsWith('data:image/webp');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Compresses and optimizes an image file before storage
- * - Resizes excessively large dimensions to a maximum of 1600x1600 while preserving aspect ratio
+ * - Automatically selects modern WebP format where supported (reducing byte weight by 50%+)
+ * - Resizes excessively large dimensions to a maximum of 1280x1280 while preserving aspect ratio
  * - Compresses with high-quality canvas rendering to reduce storage footprint
  */
 export async function compressImage(
@@ -78,11 +92,12 @@ export async function compressImage(
     outputType?: string;
   } = {}
 ): Promise<CompressionResult> {
+  const preferredType = options.outputType || (isWebpSupported() ? 'image/webp' : 'image/jpeg');
   const {
-    maxWidth = 1600,
-    maxHeight = 1600,
-    quality = 0.82,
-    outputType = 'image/jpeg',
+    maxWidth = 1280,
+    maxHeight = 1280,
+    quality = 0.80,
+    outputType = preferredType,
   } = options;
 
   return new Promise((resolve, reject) => {

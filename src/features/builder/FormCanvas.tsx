@@ -143,6 +143,8 @@ export const FormCanvas: React.FC<FormCanvasProps> = ({
             <img
               src={bannerImageUrl}
               alt={form.title}
+              loading="lazy"
+              decoding="async"
               onError={(e) => {
                 e.currentTarget.src =
                   'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';

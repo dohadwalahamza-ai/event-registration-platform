@@ -424,6 +424,8 @@ export const FormsListView: React.FC<FormsListViewProps> = ({
                     <img
                       src={form.cover_image_url}
                       alt={form.title}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-500"
                     />
                   ) : (

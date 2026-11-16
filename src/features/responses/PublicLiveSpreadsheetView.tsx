@@ -65,11 +65,10 @@ export const PublicLiveSpreadsheetView: React.FC<PublicLiveSpreadsheetViewProps>
   const publicSheetUrl = `${baseUrl}/sheet/${cleanSlug}`;
   const cloudCsvUrl = `${baseUrl}/api/csv?slug=${cleanSlug}`;
 
-  // Fetch submissions for this form
+  // Fetch submissions specifically for this form (bandwidth optimized)
   const loadSubmissions = async () => {
     try {
-      const all = await StorageService.getAllSubmissions();
-      const formSubs = all.filter((s) => isSubmissionForForm(s, form));
+      const formSubs = await StorageService.getSubmissionsForForm(form.id);
       setSubmissions(formSubs);
     } catch (err) {
       console.warn('Failed to load submissions for live sheet:', err);

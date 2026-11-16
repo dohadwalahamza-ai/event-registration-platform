@@ -1142,6 +1142,8 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                               <img
                                 src={photo}
                                 alt={sub.applicant_name || 'Player'}
+                                loading="lazy"
+                                decoding="async"
                                 className="w-9 h-9 rounded-xl object-cover border border-slate-200 shadow-2xs shrink-0"
                               />
                             ) : (
@@ -1409,6 +1411,8 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                         <img
                           src={photo}
                           alt={selectedSubmission.applicant_name || 'Participant'}
+                          loading="lazy"
+                          decoding="async"
                           className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-white/20 shadow-lg"
                         />
                         <a
@@ -1595,6 +1599,8 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                                 <img
                                   src={val}
                                   alt={field.label}
+                                  loading="lazy"
+                                  decoding="async"
                                   className="w-20 h-20 object-cover rounded-xl border border-slate-200 shadow-2xs"
                                 />
                                 <a
@@ -1891,6 +1897,7 @@ export const ResponseManagementView: React.FC<ResponseManagementViewProps> = ({
                   alt="Live Sheet QR Code"
                   className="w-24 h-24 rounded-xl border border-slate-200 bg-white p-1.5 shrink-0 shadow-2xs"
                   loading="lazy"
+                  decoding="async"
                 />
                 <div className="space-y-1 text-center sm:text-left">
                   <span className="text-xs font-bold text-slate-800 block">
