@@ -530,11 +530,24 @@ function sanitizeTimestamp(val: any): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+let cachedFormsInMemory: { data: Form[]; timestamp: number } | null = null;
+let cachedSubsInMemory: { data: Submission[]; timestamp: number } | null = null;
+const CACHE_TTL_MS = 15000; // 15s in-memory TTL to prevent redundant Supabase bandwidth egress
+
+export function invalidateStorageCache(): void {
+  cachedFormsInMemory = null;
+  cachedSubsInMemory = null;
+}
+
 export class StorageService {
   /**
-   * Fetch all forms - seamlessly merges Supabase remote and local storage
+   * Fetch all forms - seamlessly merges Supabase remote and local storage with in-memory caching
    */
-  static async getForms(): Promise<Form[]> {
+  static async getForms(forceFresh = false): Promise<Form[]> {
+    if (!forceFresh && cachedFormsInMemory && Date.now() - cachedFormsInMemory.timestamp < CACHE_TTL_MS) {
+      return cachedFormsInMemory.data;
+    }
+
     // 0. Synchronize remote deleted blacklist from Supabase first
     const { formIds: deletedIds } = await syncRemoteDeletedBlacklist();
 
@@ -603,6 +616,7 @@ export class StorageService {
           try {
             localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(unique));
           } catch {}
+          cachedFormsInMemory = { data: unique, timestamp: Date.now() };
           return unique;
         }
       } catch (err) {
@@ -610,7 +624,9 @@ export class StorageService {
       }
     }
 
-    return localForms.filter((f) => !isDeletedForm(f, deletedIds));
+    const fallbackResult = localForms.filter((f) => !isDeletedForm(f, deletedIds));
+    cachedFormsInMemory = { data: fallbackResult, timestamp: Date.now() };
+    return fallbackResult;
   }
 
   /**
@@ -1045,6 +1061,7 @@ export class StorageService {
    * Save or update a form with its fields
    */
   static async saveForm(form: Form): Promise<Form> {
+    invalidateStorageCache();
     const parsedTheme = parseThemeConfig(form.theme_config);
     const resolvedPresentationMode =
       form.presentation_mode || parsedTheme.presentationMode || 'step_by_step';
@@ -1178,6 +1195,7 @@ export class StorageService {
    * Delete a form and its responses
    */
   static async deleteForm(formId: string): Promise<void> {
+    invalidateStorageCache();
     const cleanId = (formId || '').toLowerCase().trim();
     const coreId = cleanId.replace(/^(event-form-|form-)/, '');
 
@@ -1331,7 +1349,11 @@ export class StorageService {
   /**
    * Submissions Management
    */
-  static async getAllSubmissions(): Promise<Submission[]> {
+  static async getAllSubmissions(forceFresh = false): Promise<Submission[]> {
+    if (!forceFresh && cachedSubsInMemory && Date.now() - cachedSubsInMemory.timestamp < CACHE_TTL_MS) {
+      return cachedSubsInMemory.data;
+    }
+
     // 0. Synchronize remote deleted blacklists from Supabase first
     const { formIds: deletedFormIds, subIds: deletedSubmissionIds } = await syncRemoteDeletedBlacklist();
 
@@ -1474,6 +1496,7 @@ export class StorageService {
       }
     }
 
+    cachedSubsInMemory = { data: mergedList, timestamp: Date.now() };
     return mergedList;
   }
 
@@ -1605,6 +1628,7 @@ export class StorageService {
     data: Record<string, any>,
     formTitle?: string
   ): Promise<Submission> {
+    invalidateStorageCache();
     const applicantName = data.full_name || data.applicant_name || data.name || data.team_name || 'Participant';
     const applicantEmail = data.email || data.contact_email || '';
 
@@ -1736,6 +1760,7 @@ export class StorageService {
     submissionId: string,
     status: 'confirmed' | 'pending' | 'cancelled'
   ): Promise<void> {
+    invalidateStorageCache();
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -1762,6 +1787,7 @@ export class StorageService {
   }
 
   static async updateSubmissionNotes(submissionId: string, notes: string): Promise<void> {
+    invalidateStorageCache();
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -1862,6 +1888,7 @@ export class StorageService {
   }
 
   static async deleteSubmission(submissionId: string): Promise<void> {
+    invalidateStorageCache();
     // 1. Immediately blacklist submission ID locally
     addDeletedSubmissionId(submissionId);
 
@@ -1918,24 +1945,60 @@ export class StorageService {
   }
 
   /**
-   * Aggregate statistics for dashboard overview
+   * Compute statistics directly in-memory with zero network overhead
    */
-  static async getDashboardStats(): Promise<DashboardStats> {
-    const forms = await this.getForms();
-    const submissions = await this.getAllSubmissions();
-
-    const publishedForms = forms.filter((f) => f.status === 'published').length;
+  static computeDashboardStats(forms: Form[] = [], submissions: Submission[] = []): DashboardStats {
+    const validForms = forms.filter((f) => !isSystemForm(f) && !isDeletedForm(f));
+    const publishedForms = validForms.filter((f) => f.status === 'published').length;
     const sevenDaysAgo = Date.now() - 7 * 24 * 3600 * 1000;
-    const recentSubmissions = submissions.filter(
+    const validSubs = submissions.filter((s) => !isDeletedSubmission(s));
+    const recentSubmissions = validSubs.filter(
       (s) => new Date(s.submitted_at).getTime() >= sevenDaysAgo
     ).length;
 
     return {
-      totalForms: forms.length,
+      totalForms: validForms.length,
       publishedForms,
-      totalRegistrations: submissions.length,
+      totalRegistrations: validSubs.length,
       recentSubmissions,
     };
+  }
+
+  /**
+   * Aggregate statistics for dashboard overview (memory/cache first, no redundant Supabase round-trips)
+   */
+  static async getDashboardStats(forms?: Form[], submissions?: Submission[]): Promise<DashboardStats> {
+    if (forms && submissions) {
+      return this.computeDashboardStats(forms, submissions);
+    }
+
+    let resolvedForms = forms;
+    if (!resolvedForms) {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.FORMS) : null;
+      if (raw) {
+        try {
+          resolvedForms = JSON.parse(raw);
+        } catch {}
+      }
+      if (!resolvedForms || resolvedForms.length === 0) {
+        resolvedForms = await this.getForms();
+      }
+    }
+
+    let resolvedSubs = submissions;
+    if (!resolvedSubs) {
+      const rawSubs = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.SUBMISSIONS) : null;
+      if (rawSubs) {
+        try {
+          resolvedSubs = JSON.parse(rawSubs);
+        } catch {}
+      }
+      if (!resolvedSubs) {
+        resolvedSubs = await this.getAllSubmissions();
+      }
+    }
+
+    return this.computeDashboardStats(resolvedForms || [], resolvedSubs || []);
   }
 
   /**

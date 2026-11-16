@@ -386,7 +386,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 pr-1">
           {/* View Responses shortcut (only if already saved in All Forms) */}
           {isDraftSaved && (
             <Button
@@ -394,7 +394,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
               variant="ghost"
               onClick={() => onViewResponses(form.id)}
               leftIcon={<Inbox className="w-3.5 h-3.5" />}
-              className="hidden md:inline-flex"
+              className="hidden lg:inline-flex"
             >
               Responses
             </Button>
@@ -419,11 +419,11 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
                     : 'Form will display all sections on a single continuous page.'
                 );
               }}
-              className="hidden xl:inline-flex items-center gap-1.5 px-3 h-9 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-indigo-600 transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+              className="hidden 2xl:inline-flex items-center gap-1.5 px-3 h-9 min-h-[36px] max-h-[36px] rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-indigo-600 transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
               title="Click to toggle between Step-by-Step Pages vs Single Page"
             >
               <Layers className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-              <span>
+              <span className="whitespace-nowrap">
                 {form.presentation_mode === 'all_at_once'
                   ? 'Mode: 1 Page'
                   : `Mode: ${sections.length} Steps`}
@@ -439,7 +439,8 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             leftIcon={<Palette className="w-3.5 h-3.5 text-indigo-600" />}
             title="Edit event theme, accent colors, banners, and schedule"
           >
-            Theme & Banner
+            <span className="hidden xl:inline">Theme & Banner</span>
+            <span className="xl:hidden">Theme</span>
           </Button>
 
           {/* Live Preview in New Tab */}
@@ -483,7 +484,7 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             title="Save as Draft and add to All Forms"
           >
             {form.status === 'draft' && isDraftSaved && !hasUnsavedChanges
-              ? 'Stored in Draft'
+              ? 'In Draft'
               : hasUnsavedChanges && isDraftSaved
               ? 'Update Draft*'
               : 'Save Draft'}

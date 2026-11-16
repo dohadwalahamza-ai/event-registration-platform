@@ -281,7 +281,7 @@ function AppContent() {
 
       const allForms = await StorageService.getForms();
       const allSubmissions = await StorageService.getAllSubmissions();
-      const dashboardStats = await StorageService.getDashboardStats();
+      const dashboardStats = StorageService.computeDashboardStats(allForms, allSubmissions);
 
       setForms(allForms);
       setSubmissions(allSubmissions);
@@ -321,8 +321,7 @@ function AppContent() {
     try {
       const allSubmissions = await StorageService.getAllSubmissions();
       setSubmissions(allSubmissions);
-      const dashboardStats = await StorageService.getDashboardStats();
-      setStats(dashboardStats);
+      setStats(StorageService.computeDashboardStats(forms, allSubmissions));
     } catch (e) {
       console.warn('Failed to refresh submissions:', e);
     } finally {
@@ -341,9 +340,10 @@ function AppContent() {
       if (newSub) {
         setSubmissions((prev) => {
           if (prev.some((s) => s.id === newSub.id)) return prev;
-          return [newSub, ...prev];
+          const next = [newSub, ...prev];
+          setStats(StorageService.computeDashboardStats(forms, next));
+          return next;
         });
-        StorageService.getDashboardStats().then(setStats).catch(() => {});
 
         // Trigger privacy-safe desktop notification
         const matchedForm = forms.find((f) => isSubmissionForForm(newSub, f));
@@ -364,22 +364,27 @@ function AppContent() {
       const deletedId = e.detail;
       if (deletedId) {
         const cleanId = String(deletedId).toLowerCase().replace(/^(event-form-|form-)/, '');
-        setForms((prev) => prev.filter((f) => f.id !== deletedId && f.id.toLowerCase() !== deletedId.toLowerCase()));
-        setSubmissions((prev) =>
-          prev.filter((s) => {
+        const nextForms = forms.filter((f) => f.id !== deletedId && f.id.toLowerCase() !== deletedId.toLowerCase());
+        setForms(nextForms);
+        setSubmissions((prev) => {
+          const nextSubs = prev.filter((s) => {
             const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
             return s.form_id !== deletedId && subClean !== cleanId;
-          })
-        );
-        StorageService.getDashboardStats().then(setStats).catch(() => {});
+          });
+          setStats(StorageService.computeDashboardStats(nextForms, nextSubs));
+          return nextSubs;
+        });
       }
     };
 
     const handleSubmissionDeleted = (e: any) => {
       const deletedSubId = e.detail;
       if (deletedSubId) {
-        setSubmissions((prev) => prev.filter((s) => s.id !== deletedSubId));
-        StorageService.getDashboardStats().then(setStats).catch(() => {});
+        setSubmissions((prev) => {
+          const nextSubs = prev.filter((s) => s.id !== deletedSubId);
+          setStats(StorageService.computeDashboardStats(forms, nextSubs));
+          return nextSubs;
+        });
       }
     };
 
@@ -388,12 +393,16 @@ function AppContent() {
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'eventform_submissions_v1') {
-        StorageService.getAllSubmissions().then(setSubmissions).catch(() => {});
-        StorageService.getDashboardStats().then(setStats).catch(() => {});
+        StorageService.getAllSubmissions().then((subs) => {
+          setSubmissions(subs);
+          setStats(StorageService.computeDashboardStats(forms, subs));
+        }).catch(() => {});
       }
       if (e.key === 'eventform_forms_v1' || e.key === 'eventform_deleted_ids_v1') {
-        StorageService.getForms().then(setForms).catch(() => {});
-        StorageService.getDashboardStats().then(setStats).catch(() => {});
+        StorageService.getForms().then((freshForms) => {
+          setForms(freshForms);
+          setStats(StorageService.computeDashboardStats(freshForms, submissions));
+        }).catch(() => {});
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -403,18 +412,24 @@ function AppContent() {
       (newSub) => {
         setSubmissions((prev) => {
           if (prev.some((s) => s.id === newSub.id)) return prev;
-          return [newSub, ...prev];
+          const next = [newSub, ...prev];
+          setStats(StorageService.computeDashboardStats(forms, next));
+          return next;
         });
-        StorageService.getDashboardStats().then(setStats).catch(() => {});
       },
       (updatedSub) => {
-        setSubmissions((prev) =>
-          prev.map((s) => (s.id === updatedSub.id ? updatedSub : s))
-        );
+        setSubmissions((prev) => {
+          const next = prev.map((s) => (s.id === updatedSub.id ? updatedSub : s));
+          setStats(StorageService.computeDashboardStats(forms, next));
+          return next;
+        });
       },
       (deletedId) => {
-        setSubmissions((prev) => prev.filter((s) => s.id !== deletedId));
-        StorageService.getDashboardStats().then(setStats).catch(() => {});
+        setSubmissions((prev) => {
+          const next = prev.filter((s) => s.id !== deletedId);
+          setStats(StorageService.computeDashboardStats(forms, next));
+          return next;
+        });
       }
     );
 
@@ -425,13 +440,15 @@ function AppContent() {
       window.removeEventListener('storage', handleStorageChange);
       unsubscribeRealtime();
     };
-  }, [forms]);
+  }, [forms, submissions]);
 
-  // Automatically refresh submissions when switching to Responses or Dashboard
+  // Refresh submissions only on initial tab access if empty
   useEffect(() => {
-    if (currentTab === 'responses' || currentTab === 'dashboard') {
-      StorageService.getAllSubmissions().then(setSubmissions).catch(() => {});
-      StorageService.getDashboardStats().then(setStats).catch(() => {});
+    if ((currentTab === 'responses' || currentTab === 'dashboard') && submissions.length === 0) {
+      StorageService.getAllSubmissions().then((subs) => {
+        setSubmissions(subs);
+        setStats(StorageService.computeDashboardStats(forms, subs));
+      }).catch(() => {});
     }
   }, [currentTab]);
 
@@ -656,21 +673,22 @@ function AppContent() {
   // Delete form
   const handleDeleteForm = async (formId: string) => {
     await StorageService.deleteForm(formId);
-    setForms((prev) => {
-      const remaining = prev.filter((f) => f.id !== formId);
+    const cleanId = formId.toLowerCase().replace(/^(event-form-|form-)/, '');
+    setForms((prevForms) => {
+      const remaining = prevForms.filter((f) => f.id !== formId);
       if (activeFormId === formId) {
         setActiveFormId(remaining[0]?.id || null);
       }
+      setSubmissions((prevSubs) => {
+        const nextSubs = prevSubs.filter((s) => {
+          const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+          return s.form_id !== formId && subClean !== cleanId;
+        });
+        setStats(StorageService.computeDashboardStats(remaining, nextSubs));
+        return nextSubs;
+      });
       return remaining;
     });
-    const cleanId = formId.toLowerCase().replace(/^(event-form-|form-)/, '');
-    setSubmissions((prev) =>
-      prev.filter((s) => {
-        const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
-        return s.form_id !== formId && subClean !== cleanId;
-      })
-    );
-    StorageService.getDashboardStats().then(setStats).catch(() => {});
   };
 
   // Bulk delete forms
@@ -678,20 +696,21 @@ function AppContent() {
     await StorageService.deleteForms(formIds);
     const idSet = new Set(formIds);
     const cleanIdSet = new Set(formIds.map((id) => id.toLowerCase().replace(/^(event-form-|form-)/, '')));
-    setForms((prev) => {
-      const remaining = prev.filter((f) => !idSet.has(f.id));
+    setForms((prevForms) => {
+      const remaining = prevForms.filter((f) => !idSet.has(f.id));
       if (activeFormId && idSet.has(activeFormId)) {
         setActiveFormId(remaining[0]?.id || null);
       }
+      setSubmissions((prevSubs) => {
+        const nextSubs = prevSubs.filter((s) => {
+          const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
+          return !idSet.has(s.form_id) && !cleanIdSet.has(subClean);
+        });
+        setStats(StorageService.computeDashboardStats(remaining, nextSubs));
+        return nextSubs;
+      });
       return remaining;
     });
-    setSubmissions((prev) =>
-      prev.filter((s) => {
-        const subClean = (s.form_id || '').toLowerCase().replace(/^(event-form-|form-)/, '');
-        return !idSet.has(s.form_id) && !cleanIdSet.has(subClean);
-      })
-    );
-    StorageService.getDashboardStats().then(setStats).catch(() => {});
   };
 
   // Toggle publish status with deadline validation (Task 32)

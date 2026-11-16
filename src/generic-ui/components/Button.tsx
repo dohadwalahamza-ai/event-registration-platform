@@ -43,10 +43,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const sizes = {
-      sm: 'h-9 text-xs px-3 rounded-xl gap-1.5',
-      md: 'h-10 text-sm px-4 rounded-xl gap-2',
-      lg: 'h-11 text-base px-5 rounded-xl gap-2.5',
-      icon: 'h-9 w-9 p-0 rounded-xl',
+      sm: 'h-9 min-h-[36px] max-h-[36px] text-xs px-3 rounded-xl gap-1.5 leading-none shrink-0',
+      md: 'h-10 min-h-[40px] max-h-[40px] text-sm px-4 rounded-xl gap-2 leading-none shrink-0',
+      lg: 'h-11 min-h-[44px] max-h-[44px] text-base px-5 rounded-xl gap-2.5 leading-none shrink-0',
+      icon: 'h-9 w-9 min-h-[36px] max-h-[36px] min-w-[36px] max-w-[36px] p-0 rounded-xl shrink-0',
     };
 
     return (
@@ -61,7 +61,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ) : (
           leftIcon && <span className="shrink-0">{leftIcon}</span>
         )}
-        {children}
+        <span className="whitespace-nowrap truncate inline-flex items-center gap-1.5">{children}</span>
         {!isLoading && rightIcon && <span className="shrink-0">{rightIcon}</span>}
       </button>
     );
