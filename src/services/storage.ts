@@ -10,14 +10,48 @@ const STORAGE_KEYS = {
   DELETED_SUBMISSION_IDS: 'eventform_deleted_submission_ids_v1',
 };
 
+export const KNOWN_DELETED_FORM_IDS = [
+  'form-kpcl-season-5',
+  'kpcl-season-5',
+  'event-form-kpcl-season-5',
+  'form-robotics-ai-hackathon',
+  'robotics-ai-hackathon-2026',
+  'form-mvqx7ulk',
+  'form-mvqyem44',
+  'form-mvqbgcvt',
+  'form-mvqx7u1k',
+  'form-mvph0jx2',
+  'form-mvqlnbt2',
+];
+
+export const KNOWN_DELETED_SUBMISSION_IDS = [
+  'sub-1',
+  'sub-2',
+  'sub-3',
+  'sub-1793035405097-1py7q',
+  'sub-1793178218862-x4gd5',
+  'sub-1794244075459-c526e',
+  'sub-1793178152166-13cda',
+  'sub-1794241883514-fw1u3',
+  'sub-1794243169316-j09fq',
+  'sub-1793182924900-tmjc3',
+  'sub-1794242263051-fijyy',
+  'sub-1794240584186-frk4i',
+];
+
 function getDeletedFormIds(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
+  const set = new Set<string>(KNOWN_DELETED_FORM_IDS);
+  if (typeof window === 'undefined') return set;
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.DELETED_FORM_IDS);
-    return new Set(raw ? JSON.parse(raw) : []);
-  } catch {
-    return new Set();
-  }
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((id) => set.add(String(id).toLowerCase().trim()));
+      }
+    }
+  } catch {}
+  return set;
 }
 
 function addDeletedFormId(id: string) {
@@ -28,13 +62,18 @@ function addDeletedFormId(id: string) {
 }
 
 function getDeletedSubmissionIds(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
+  const set = new Set<string>(KNOWN_DELETED_SUBMISSION_IDS);
+  if (typeof window === 'undefined') return set;
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.DELETED_SUBMISSION_IDS);
-    return new Set(raw ? JSON.parse(raw) : []);
-  } catch {
-    return new Set();
-  }
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((id) => set.add(String(id).trim()));
+      }
+    }
+  } catch {}
+  return set;
 }
 
 function addDeletedSubmissionId(id: string) {
@@ -98,6 +137,26 @@ export async function syncRemoteDeletedBlacklist(): Promise<{ formIds: Set<strin
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEYS.DELETED_FORM_IDS, JSON.stringify(Array.from(localFormIds)));
         localStorage.setItem(STORAGE_KEYS.DELETED_SUBMISSION_IDS, JSON.stringify(Array.from(localSubIds)));
+      }
+
+      // If local has additional deleted IDs, bidirectional sync them up to Supabase
+      const remoteFormCount = Array.isArray(cfg?.deleted_form_ids) ? cfg.deleted_form_ids.length : 0;
+      const remoteSubCount = Array.isArray(cfg?.deleted_submission_ids) ? cfg.deleted_submission_ids.length : 0;
+      if (localFormIds.size > remoteFormCount || localSubIds.size > remoteSubCount) {
+        Promise.resolve(
+          supabase.from('forms').upsert({
+            id: SYSTEM_STATE_FORM_ID,
+            owner_id: 'system',
+            title: '__SYSTEM_STATE__',
+            slug: SYSTEM_STATE_FORM_ID,
+            status: 'draft',
+            theme_config: {
+              deleted_form_ids: Array.from(localFormIds),
+              deleted_submission_ids: Array.from(localSubIds),
+              updated_at: new Date().toISOString(),
+            },
+          })
+        ).catch(() => {});
       }
     }
   } catch (e) {
@@ -242,45 +301,56 @@ export function isFormExpired(form: { registration_deadline?: string; status?: s
 // Initialize local storage - keep forms clean so mobile browsers don't load stale samples
 function initializeStorage() {
   if (typeof window === 'undefined') return;
-  const existingForms = localStorage.getItem(STORAGE_KEYS.FORMS);
-  if (!existingForms) {
-    localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify([]));
-  } else {
-    // Purge dummy fallback forms, system forms, and deleted forms from localStorage
-    try {
+  const deletedFormIds = getDeletedFormIds();
+  const deletedSubIds = getDeletedSubmissionIds();
+
+  // 1. Purge dummy fallback forms, system forms, and deleted forms from localStorage
+  try {
+    const existingForms = localStorage.getItem(STORAGE_KEYS.FORMS);
+    if (existingForms) {
       const parsed: Form[] = JSON.parse(existingForms);
       if (Array.isArray(parsed)) {
-        const deletedIds = getDeletedFormIds();
         const cleaned = parsed.filter(
           (f) =>
             !isSystemForm(f) &&
             !f.id.startsWith('form-fallback-') &&
-            !deletedIds.has(f.id.toLowerCase()) &&
-            !deletedIds.has((f.slug || '').toLowerCase())
+            !isDeletedForm(f, deletedFormIds)
         );
         if (cleaned.length !== parsed.length) {
           localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(cleaned));
         }
       }
-    } catch {}
-  }
+    } else {
+      localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify([]));
+    }
+  } catch {}
 
-  const existingSubs = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
-  if (existingSubs) {
-    try {
+  // 2. Purge dummy, deleted, or orphaned submissions from localStorage
+  try {
+    const existingSubs = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+    if (existingSubs) {
       const parsedSubs: Submission[] = JSON.parse(existingSubs);
-      const realSubs = parsedSubs.filter(
-        (s) =>
-          !['sub-1', 'sub-2', 'sub-3'].includes(s.id) &&
-          !['Rohit Verma', 'Zaheer Khan', 'Dinesh Karthik'].includes(s.applicant_name || '')
-      );
-      if (realSubs.length !== parsedSubs.length) {
-        localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(realSubs));
+      if (Array.isArray(parsedSubs)) {
+        const realSubs = parsedSubs.filter(
+          (s) =>
+            !['sub-1', 'sub-2', 'sub-3'].includes(s.id) &&
+            !['Rohit Verma', 'Zaheer Khan', 'Dinesh Karthik'].includes(s.applicant_name || '') &&
+            !isDeletedSubmission(s, deletedSubIds, deletedFormIds)
+        );
+        if (realSubs.length !== parsedSubs.length) {
+          localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(realSubs));
+        }
       }
-    } catch {}
-  } else {
-    localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify([]));
-  }
+    } else {
+      localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify([]));
+    }
+  } catch {}
+
+  // 3. Persist the updated blacklist to localStorage so Mobile has it permanently
+  try {
+    localStorage.setItem(STORAGE_KEYS.DELETED_FORM_IDS, JSON.stringify(Array.from(deletedFormIds)));
+    localStorage.setItem(STORAGE_KEYS.DELETED_SUBMISSION_IDS, JSON.stringify(Array.from(deletedSubIds)));
+  } catch {}
 }
 
 initializeStorage();
@@ -604,7 +674,19 @@ export class StorageService {
   static async checkAndTransitionExpiredForms(): Promise<string[]> {
     const transitionedIds: string[] = [];
     try {
-      const allForms = await this.getForms();
+      let allForms: Form[] = [];
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.FORMS) : null;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            allForms = parsed;
+          }
+        } catch {}
+      }
+      if (allForms.length === 0) {
+        allForms = await this.getForms();
+      }
       const now = Date.now();
 
       for (const form of allForms) {
@@ -843,38 +925,28 @@ export class StorageService {
   /**
    * Check if Supabase write permissions (RLS) are active or blocked
    */
-  static async checkSupabaseWriteStatus(): Promise<{ connected: boolean; rlsBlocked: boolean; message: string }> {
+  static async checkSupabaseWriteStatus(): Promise<{ connected: boolean; rlsBlocked: boolean; quotaExceeded: boolean; message: string }> {
     const supabase = getSupabaseClient();
     if (!supabase) {
-      return { connected: false, rlsBlocked: false, message: 'Supabase client not initialized.' };
+      return { connected: false, rlsBlocked: false, quotaExceeded: false, message: 'Supabase client not initialized.' };
     }
 
     try {
-      const testId = '__perm_check__';
-      const { error: writeError } = await supabase.from('forms').upsert({
-        id: testId,
-        owner_id: 'admin',
-        title: 'Permission Check',
-        slug: testId,
-        status: 'draft',
-      });
-
-      if (writeError) {
-        if (writeError.code === '42501' || writeError.message.includes('row-level security')) {
-          return {
-            connected: true,
-            rlsBlocked: true,
-            message: 'Supabase Row-Level Security (RLS) is blocking inserts (Code 42501).',
-          };
-        }
-        return { connected: true, rlsBlocked: false, message: writeError.message };
+      const { error: pingError } = await supabase.from('forms').select('id').limit(1);
+      if (pingError) {
+        const isQuota = pingError.message?.includes('exceed_egress_quota') || pingError.message?.includes('restricted');
+        return {
+          connected: false,
+          rlsBlocked: pingError.code === '42501' || pingError.message?.includes('row-level security'),
+          quotaExceeded: isQuota,
+          message: isQuota
+            ? 'Supabase egress bandwidth quota exceeded. The project is restricted by Supabase. Please remove spend caps or upgrade your plan in Supabase to restore cloud synchronization.'
+            : pingError.message,
+        };
       }
-
-      // Cleanup test row
-      await supabase.from('forms').delete().eq('id', testId);
-      return { connected: true, rlsBlocked: false, message: 'Cloud sync active and ready.' };
+      return { connected: true, rlsBlocked: false, quotaExceeded: false, message: 'Cloud sync active and ready.' };
     } catch (err: any) {
-      return { connected: false, rlsBlocked: false, message: err?.message || 'Connection error' };
+      return { connected: false, rlsBlocked: false, quotaExceeded: false, message: err?.message || 'Connection error' };
     }
   }
 
@@ -1417,25 +1489,9 @@ export class StorageService {
     const supabase = getSupabaseClient();
     let isCleanedUp = false;
 
-    // Periodic safety sync (every 12 seconds) so any connection blips recover automatically
-    const pollInterval = setInterval(async () => {
-      if (isCleanedUp) return;
-      try {
-        const freshSubs = await this.getAllSubmissions();
-        const rawLocal = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
-        const currentCount = rawLocal ? JSON.parse(rawLocal).length : 0;
-        if (freshSubs.length !== currentCount) {
-          freshSubs.forEach((sub) => {
-            onInsert(sub);
-          });
-        }
-      } catch {}
-    }, 12000);
-
     if (!supabase) {
       return () => {
         isCleanedUp = true;
-        clearInterval(pollInterval);
       };
     }
 
@@ -1523,14 +1579,12 @@ export class StorageService {
 
       return () => {
         isCleanedUp = true;
-        clearInterval(pollInterval);
         supabase.removeChannel(channel);
       };
     } catch (err) {
       console.warn('Failed to subscribe to realtime submissions:', err);
       return () => {
         isCleanedUp = true;
-        clearInterval(pollInterval);
       };
     }
   }

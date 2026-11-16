@@ -132,6 +132,7 @@ function AppContent() {
   });
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
+  const [supabaseWarning, setSupabaseWarning] = useState<string | null>(null);
   const [newDraftForm, setNewDraftForm] = useState<Form | null>(null);
 
   // Synchronously initialize public slug to prevent flashing admin loading or login page on mobile
@@ -286,10 +287,17 @@ function AppContent() {
       setSubmissions(allSubmissions);
       setStats(dashboardStats);
 
-      // Check Supabase connection and trigger background sync of local forms
-      const client = getSupabaseClient();
-      setIsSupabaseConnected(Boolean(client));
-      StorageService.syncLocalFormsToRemote().catch(() => {});
+      // Check Supabase connection and health status
+      const status = await StorageService.checkSupabaseWriteStatus();
+      setIsSupabaseConnected(status.connected);
+      if (status.quotaExceeded) {
+        setSupabaseWarning(status.message);
+      } else {
+        setSupabaseWarning(null);
+      }
+      if (status.connected) {
+        StorageService.syncLocalFormsToRemote().catch(() => {});
+      }
 
       // Task 31: Maintain exact route target form identifier on page load/refresh
       const route = getInitialAdminRoute();
@@ -887,6 +895,15 @@ function AppContent() {
       forms={forms}
       onSelectFormResponses={(id) => navigateToTab('responses', id)}
     >
+      {supabaseWarning && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2.5 flex items-center justify-between text-xs text-amber-900 shrink-0">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{supabaseWarning}</span>
+          </div>
+        </div>
+      )}
+
       {/* TAB 1: DASHBOARD */}
       {currentTab === 'dashboard' && (
         <DashboardView
