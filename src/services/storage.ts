@@ -2,6 +2,16 @@ import { Form, FormField, Submission, DashboardStats, FormThemeConfig } from '..
 import { SAMPLE_FORMS, INITIAL_SUBMISSIONS } from './seedData';
 import { getSupabaseClient } from './supabaseClient';
 import { MAX_PHOTO_SIZE_BYTES } from '../utils/imageCompressor';
+import {
+  apiGetFormBySlug,
+  apiGetForms,
+  apiSaveForm,
+  apiDeleteForm,
+  apiGetSubmissions,
+  apiSaveSubmission,
+  apiUpdateSubmissionStatus,
+  apiDeleteSubmission,
+} from './apiClient';
 
 const STORAGE_KEYS = {
   FORMS: 'eventform_forms_v1',
@@ -604,6 +614,29 @@ export class StorageService {
     // 0. Synchronize remote deleted blacklist from Supabase first
     const { formIds: deletedIds } = await syncRemoteDeletedBlacklist();
 
+    // 0b. Primary: Query Vercel Postgres API
+    try {
+      const apiForms = await apiGetForms();
+      if (apiForms && Array.isArray(apiForms) && apiForms.length > 0) {
+        const cleanApiForms = apiForms
+          .filter((f) => !isDeletedForm(f, deletedIds))
+          .map((f) => ({
+            ...f,
+            theme_config: parseThemeConfig(f.theme_config),
+            fields: (f.fields || []).sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)),
+          }));
+        if (cleanApiForms.length > 0) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.FORMS, JSON.stringify(cleanApiForms));
+          } catch {}
+          cachedFormsInMemory = { data: cleanApiForms, timestamp: Date.now() };
+          return cleanApiForms;
+        }
+      }
+    } catch (e) {
+      console.warn('Vercel API getForms error:', e);
+    }
+
     // 1. Read locally cached forms
     let localForms: Form[] = [];
     try {
@@ -844,6 +877,31 @@ export class StorageService {
           f.slug.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug ||
           f.id.toLowerCase().replace(/^(event-form-|form-)/, '') === coreSlug)
     );
+
+    // 0c. Primary: Query Vercel Postgres API
+    try {
+      const apiForm =
+        (await apiGetFormBySlug(cleanSlug)) ||
+        (coreSlug && coreSlug !== cleanSlug ? await apiGetFormBySlug(coreSlug) : null);
+      if (apiForm && !isDeletedForm(apiForm, deletedIds)) {
+        const parsedTheme = parseThemeConfig(apiForm.theme_config);
+        const resolved: Form = {
+          ...apiForm,
+          theme_config: parsedTheme,
+          presentation_mode:
+            apiForm.presentation_mode || parsedTheme.presentationMode || 'step_by_step',
+          fields: (apiForm.fields || []).sort(
+            (a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)
+          ),
+        };
+        publicFormCache.set(cleanSlug, { form: resolved, timestamp: Date.now() });
+        if (coreSlug) publicFormCache.set(coreSlug, { form: resolved, timestamp: Date.now() });
+        this.updateLocalFormCache(resolved);
+        return resolved;
+      }
+    } catch (apiErr) {
+      console.warn('Vercel API getFormBySlug error:', apiErr);
+    }
 
     // 1. Single, targeted PostgREST query to Supabase (replaces previous 10-query waterfall)
     const supabase = getSupabaseClient();
@@ -1099,6 +1157,9 @@ export class StorageService {
       updated_at: new Date().toISOString(),
     };
 
+    // Primary: Save to Vercel Postgres API
+    apiSaveForm(updatedForm).catch((err) => console.warn('Vercel API saveForm error:', err));
+
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -1249,6 +1310,9 @@ export class StorageService {
       await recordDeletedId(formSlug);
     }
 
+    // 2b. Primary: Delete form from Vercel Postgres API
+    apiDeleteForm(formId).catch((e) => console.warn('Vercel API deleteForm error:', e));
+
     // 3. Cascade delete associated files and records in Supabase if connected
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -1376,6 +1440,23 @@ export class StorageService {
     const isDummySubmission = (s: Submission) =>
       ['sub-1', 'sub-2', 'sub-3'].includes(s.id) &&
       ['Rohit Verma', 'Zaheer Khan', 'Dinesh Karthik'].includes(s.applicant_name || '');
+
+    // 0b. Primary: Fetch submissions from Vercel Postgres API
+    try {
+      const apiSubs = await apiGetSubmissions();
+      if (apiSubs && Array.isArray(apiSubs) && apiSubs.length > 0) {
+        const cleanApiSubs = apiSubs.filter(
+          (s) => !isDeletedSubmission(s, deletedSubmissionIds, deletedFormIds) && !isDummySubmission(s)
+        );
+        cachedSubsInMemory = { data: cleanApiSubs, timestamp: Date.now() };
+        try {
+          localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(cleanApiSubs));
+        } catch {}
+        return cleanApiSubs;
+      }
+    } catch (e) {
+      console.warn('Vercel API getAllSubmissions error:', e);
+    }
 
     // 1. Fetch remote submissions from Supabase
     let remoteList: Submission[] = [];
@@ -1650,6 +1731,20 @@ export class StorageService {
       ['sub-1', 'sub-2', 'sub-3'].includes(s.id) &&
       ['Rohit Verma', 'Zaheer Khan', 'Dinesh Karthik'].includes(s.applicant_name || '');
 
+    // Primary: Fetch from Vercel Postgres API
+    try {
+      const apiSubs = await apiGetSubmissions(cleanId);
+      if (apiSubs && Array.isArray(apiSubs) && apiSubs.length > 0) {
+        const clean = apiSubs.filter(
+          (s) => !isDeletedSubmission(s, deletedSubmissionIds, deletedFormIds) && !isDummySubmission(s)
+        );
+        cachedFormSubsInMemory.set(cacheKey, { data: clean, timestamp: Date.now() });
+        return clean;
+      }
+    } catch (e) {
+      console.warn('Vercel API getSubmissionsForForm error:', e);
+    }
+
     let remoteList: Submission[] = [];
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -1799,6 +1894,9 @@ export class StorageService {
       console.warn('Failed to save submission to localStorage:', e);
     }
 
+    // 1b. Primary: Persist to Vercel Postgres API
+    apiSaveSubmission(newSub).catch((err) => console.warn('Vercel API saveSubmission error:', err));
+
     // 2. Persist to Supabase with Foreign Key pre-check & timeout guard
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -1886,6 +1984,11 @@ export class StorageService {
         new CustomEvent('submission_updated', { detail: { id: submissionId, status } })
       );
     }
+
+    // Update in Vercel Postgres API
+    apiUpdateSubmissionStatus(submissionId, status).catch((e) =>
+      console.warn('Vercel API updateSubmissionStatus error:', e)
+    );
   }
 
   static async updateSubmissionNotes(submissionId: string, notes: string): Promise<void> {
@@ -1923,6 +2026,11 @@ export class StorageService {
         new CustomEvent('submission_updated', { detail: { id: submissionId, admin_notes: notes } })
       );
     }
+
+    // Update in Vercel Postgres API
+    apiUpdateSubmissionStatus(submissionId, undefined, notes).catch((e) =>
+      console.warn('Vercel API updateSubmissionNotes error:', e)
+    );
   }
 
   /**
@@ -1997,6 +2105,11 @@ export class StorageService {
 
     // 2. Persist deletion to Supabase system blacklist so ALL devices stay in sync!
     await recordDeletedId(undefined, submissionId);
+
+    // 2b. Primary: Delete from Vercel Postgres API
+    apiDeleteSubmission(submissionId).catch((e) =>
+      console.warn('Vercel API deleteSubmission error:', e)
+    );
 
     // 3. Clean up files and record from Supabase
     const supabase = getSupabaseClient();

@@ -1,10 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://pxwrvkpefgeonbaflaqh.supabase.co';
-const SUPABASE_ANON_KEY =
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4d3J2a3BlZmdlb25iYWZsYXFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMDk1MjAsImV4cCI6MjEwODU4NTUyMH0.IV0QxHwSJ4Gx__8Ui5eaNKVe6h-Hz4CypAIzI6FPvyM';
+import { query } from './db.js';
 
 function escapeCsvCell(val: any): string {
   if (val === undefined || val === null) return '""';
@@ -53,8 +48,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .trim();
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
     let form: any = null;
     let fields: any[] = [];
     let submissions: any[] = [];
@@ -63,58 +56,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const cleanSlug = rawSlug.toLowerCase().replace(/\/+$/, '');
       const coreSlug = cleanSlug.replace(/^(event-form-|form-)/, '');
 
-      // 1. Locate form in Supabase
-      const { data: formData } = await supabase
-        .from('forms')
-        .select('*')
-        .or(
-          `slug.eq.${cleanSlug},slug.eq.${coreSlug},slug.eq.event-form-${coreSlug},slug.eq.form-${coreSlug},id.eq.${cleanSlug},id.eq.form-${coreSlug}`
-        )
-        .limit(1)
-        .maybeSingle();
+      // 1. Locate form in Postgres
+      const formRes = await query(
+        `SELECT * FROM forms 
+         WHERE LOWER(slug) IN ($1, $2, $3, $4)
+            OR LOWER(id) IN ($1, $2, $3, $4)
+         LIMIT 1`,
+        [cleanSlug, coreSlug, `event-form-${coreSlug}`, `form-${coreSlug}`]
+      );
 
-      form = formData;
+      if (formRes.rows.length > 0) {
+        form = formRes.rows[0];
 
-      if (!form) {
-        // Fallback search across forms
-        const { data: allForms } = await supabase.from('forms').select('*').limit(50);
-        if (allForms && Array.isArray(allForms)) {
-          form = allForms.find((f: any) => {
-            const fs = (f.slug || '').toLowerCase();
-            const fi = (f.id || '').toLowerCase();
-            return (
-              fs === cleanSlug ||
-              fi === cleanSlug ||
-              fs === `event-form-${coreSlug}` ||
-              fi === `form-${coreSlug}` ||
-              fs.replace(/^(event-form-|form-)/, '') === coreSlug
-            );
-          });
-        }
-      }
-
-      if (form) {
         // 2. Fetch form fields
-        const { data: fieldsData } = await supabase
-          .from('form_fields')
-          .select('*')
-          .eq('form_id', form.id)
-          .order('sort_order', { ascending: true });
-
-        if (fieldsData && Array.isArray(fieldsData)) {
-          fields = fieldsData;
-        }
+        const fieldsRes = await query(
+          `SELECT * FROM form_fields 
+           WHERE form_id = $1 
+           ORDER BY sort_order ASC, created_at ASC`,
+          [form.id]
+        );
+        fields = fieldsRes.rows;
 
         // 3. Fetch submissions for this form
-        const { data: subsData } = await supabase
-          .from('submissions')
-          .select('*')
-          .eq('form_id', form.id)
-          .order('submitted_at', { ascending: false });
-
-        if (subsData && Array.isArray(subsData)) {
-          submissions = subsData;
-        }
+        const subsRes = await query(
+          `SELECT * FROM submissions 
+           WHERE form_id = $1 
+           ORDER BY submitted_at DESC`,
+          [form.id]
+        );
+        submissions = subsRes.rows;
       }
     }
 

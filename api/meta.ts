@@ -1,12 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
-
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://pxwrvkpefgeonbaflaqh.supabase.co';
-const SUPABASE_ANON_KEY =
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4d3J2a3BlZmdlb25iYWZsYXFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMDk1MjAsImV4cCI6MjEwODU4NTUyMH0.IV0QxHwSJ4Gx__8Ui5eaNKVe6h-Hz4CypAIzI6FPvyM';
+import { query } from './db.js';
 
 const DEFAULT_IMAGE =
   'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1600&q=80';
@@ -34,18 +29,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (slug) {
     try {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       const cleanSlug = slug.replace(/\/+$/, '');
       const coreSlug = cleanSlug.replace(/^(event-form-|form-)/, '');
 
-      const { data } = await supabase
-        .from('forms')
-        .select('title, description, cover_image_url')
-        .or(`slug.eq.${cleanSlug},slug.eq.${coreSlug},slug.eq.event-form-${coreSlug},id.eq.${cleanSlug},id.eq.form-${coreSlug}`)
-        .limit(1)
-        .maybeSingle();
+      const result = await query(
+        `SELECT title, description, cover_image_url FROM forms 
+         WHERE LOWER(slug) IN ($1, $2, $3, $4) 
+            OR LOWER(id) IN ($1, $2, $3, $4) 
+         LIMIT 1`,
+        [cleanSlug, coreSlug, `event-form-${coreSlug}`, `form-${coreSlug}`]
+      );
 
-      if (data) {
+      if (result.rows.length > 0) {
+        const data = result.rows[0];
         if (data.title) formTitle = `${data.title} | Event Registration`;
         if (data.description) formDesc = data.description;
         else formDesc = `Register online for ${data.title}. Fill out the official registration form to participate.`;
@@ -98,20 +94,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } catch {}
 
+  // Fallback to minimal shell if dist/index.html is not yet built
   if (!html) {
-    html = `<!doctype html>
+    html = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     ${metaSnippet}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>`;
   }
