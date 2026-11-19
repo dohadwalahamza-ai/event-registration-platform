@@ -3,18 +3,18 @@ import dns from 'node:dns/promises';
 
 const { Pool } = pg;
 
-const connectionString =
-  process.env.POSTGRES_URL ||
-  process.env.DATABASE_URL ||
-  'postgresql://neondb_owner:npg_8fcPg4NwSnqA@ep-wandering-sunset-bc0jar90-pooler.c-16.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require';
-
 let poolInstance: pg.Pool | null = null;
 
 async function getPool(): Promise<pg.Pool> {
   if (poolInstance) return poolInstance;
 
+  const conn = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+  if (!conn) {
+    throw new Error('Database connection error: Neither POSTGRES_URL nor DATABASE_URL environment variable is configured.');
+  }
+
   try {
-    const url = new URL(connectionString);
+    const url = new URL(conn);
     const host = url.hostname;
 
     // Check if system DNS resolves host
@@ -49,7 +49,7 @@ async function getPool(): Promise<pg.Pool> {
       });
     } else {
       poolInstance = new Pool({
-        connectionString,
+        connectionString: conn,
         ssl: {
           rejectUnauthorized: false,
         },
@@ -62,7 +62,7 @@ async function getPool(): Promise<pg.Pool> {
     return poolInstance;
   } catch {
     poolInstance = new Pool({
-      connectionString,
+      connectionString: conn,
       ssl: {
         rejectUnauthorized: false,
       },
