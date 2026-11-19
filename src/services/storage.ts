@@ -1004,31 +1004,27 @@ export class StorageService {
   }
 
   /**
-   * Check if Supabase write permissions (RLS) are active or blocked
+   * Check if Cloud database (Vercel Postgres) write permissions are active or blocked
    */
   static async checkSupabaseWriteStatus(): Promise<{ connected: boolean; rlsBlocked: boolean; quotaExceeded: boolean; message: string }> {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return { connected: false, rlsBlocked: false, quotaExceeded: false, message: 'Supabase client not initialized.' };
-    }
-
     try {
-      const { error: pingError } = await supabase.from('forms').select('id').limit(1);
-      if (pingError) {
-        const isQuota = pingError.message?.includes('exceed_egress_quota') || pingError.message?.includes('restricted');
+      const res = await fetch('/api/forms');
+      if (res.ok) {
         return {
-          connected: false,
-          rlsBlocked: pingError.code === '42501' || pingError.message?.includes('row-level security'),
-          quotaExceeded: isQuota,
-          message: isQuota
-            ? 'Supabase egress bandwidth quota exceeded. The project is restricted by Supabase. Please remove spend caps or upgrade your plan in Supabase to restore cloud synchronization.'
-            : pingError.message,
+          connected: true,
+          rlsBlocked: false,
+          quotaExceeded: false,
+          message: 'Cloud sync active and ready (Vercel Postgres).',
         };
       }
-      return { connected: true, rlsBlocked: false, quotaExceeded: false, message: 'Cloud sync active and ready.' };
-    } catch (err: any) {
-      return { connected: false, rlsBlocked: false, quotaExceeded: false, message: err?.message || 'Connection error' };
-    }
+    } catch {}
+
+    return {
+      connected: false,
+      rlsBlocked: false,
+      quotaExceeded: false,
+      message: 'Cloud database connecting...',
+    };
   }
 
   private static lastLocalFormsSyncTime = 0;
