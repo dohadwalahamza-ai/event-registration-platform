@@ -43,9 +43,9 @@ async function getPool(): Promise<pg.Pool> {
           rejectUnauthorized: false,
           servername: host,
         },
-        max: 10,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
+        max: 3, // Optimal for Serverless concurrency with PgBouncer
+        idleTimeoutMillis: 10000,
+        connectionTimeoutMillis: 5000,
       });
     } else {
       poolInstance = new Pool({
@@ -53,9 +53,9 @@ async function getPool(): Promise<pg.Pool> {
         ssl: {
           rejectUnauthorized: false,
         },
-        max: 10,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
+        max: 3, // Optimal for Serverless concurrency with PgBouncer
+        idleTimeoutMillis: 10000,
+        connectionTimeoutMillis: 5000,
       });
     }
 
@@ -66,7 +66,9 @@ async function getPool(): Promise<pg.Pool> {
       ssl: {
         rejectUnauthorized: false,
       },
-      max: 10,
+      max: 3,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 5000,
     });
     return poolInstance;
   }

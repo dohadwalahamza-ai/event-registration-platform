@@ -123,3 +123,4 @@ export async function apiDeleteSubmission(id: string): Promise<boolean> {
     return false;
   }
 }
+

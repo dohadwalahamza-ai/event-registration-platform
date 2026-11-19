@@ -24,23 +24,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
       const offset = parseInt(req.query.offset as string) || 0;
 
+      // Project only necessary columns to minimize bandwidth and memory
+      const SUBMISSION_COLUMNS = `
+        id, form_id, form_version, applicant_name, applicant_email,
+        submission_data, submitted_at, status, admin_notes, updated_at
+      `;
+
       if (formId) {
+        // Leverages idx_submissions_form_date for sub-millisecond paginated scan
         const result = await query(
-          `SELECT * FROM submissions 
+          `SELECT ${SUBMISSION_COLUMNS} FROM submissions 
            WHERE form_id = $1 
            ORDER BY submitted_at DESC 
            LIMIT $2 OFFSET $3`,
           [formId, limit, offset]
         );
+        res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
         return res.status(200).json({ submissions: result.rows });
       }
 
       const result = await query(
-        `SELECT * FROM submissions 
+        `SELECT ${SUBMISSION_COLUMNS} FROM submissions 
          ORDER BY submitted_at DESC 
          LIMIT $1 OFFSET $2`,
         [limit, offset]
       );
+      res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
       return res.status(200).json({ submissions: result.rows });
     }
 
@@ -53,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const id = sub.id || `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const submissionData = sub.submission_data || {};
 
+      // Efficient insert returning only necessary confirmation columns (saving bandwidth during submission peaks)
       const result = await query(
         `INSERT INTO submissions (
           id, form_id, form_version, submission_data, submitted_at,
@@ -66,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           applicant_name = EXCLUDED.applicant_name,
           applicant_email = EXCLUDED.applicant_email,
           updated_at = NOW()
-        RETURNING *`,
+        RETURNING id, form_id, status, submitted_at, applicant_name, applicant_email`,
         [
           id,
           sub.form_id,

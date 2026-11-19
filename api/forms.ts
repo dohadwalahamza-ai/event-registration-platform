@@ -5,7 +5,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -29,7 +29,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const core = clean.replace(/^(event-form-|form-)/, '');
 
         const formResult = await query(
-          `SELECT * FROM forms 
+          `SELECT 
+            id, owner_id, title, slug, description, cover_image_url,
+            event_date, event_end_date, venue, status, registration_deadline,
+            theme_config, presentation_mode, success_message, redirect_url,
+            published_version, updated_at
+           FROM forms 
            WHERE LOWER(slug) IN ($1, $2, $3, $4)
               OR LOWER(id) IN ($1, $2, $3, $4)
            LIMIT 1`,
@@ -42,9 +47,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const form = formResult.rows[0];
 
-        // Fetch fields
+        // ETag handling for 304 Not Modified (instant 0-byte load on repeated visits)
+        const etag = `"${form.id}-${new Date(form.updated_at || 0).getTime()}"`;
+        res.setHeader('ETag', etag);
+        if (req.headers['if-none-match'] === etag) {
+          return res.status(304).end();
+        }
+
+        // Fetch fields with composite index idx_form_fields_form_sort
         const fieldsResult = await query(
-          `SELECT * FROM form_fields 
+          `SELECT 
+            id, form_id, field_key, label, field_type, description,
+            placeholder, required, default_value, options,
+            validation_rules, conditional_rules, sort_order, configuration
+           FROM form_fields 
            WHERE form_id = $1 
            ORDER BY sort_order ASC, created_at ASC`,
           [form.id]
@@ -52,14 +68,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         form.fields = fieldsResult.rows;
 
-        // Set caching headers for public form GET (1 minute stale-while-revalidate)
-        res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
+        // Peak optimization: Vercel Global Edge CDN caching
+        // s-maxage=60 caches at CDN edge closest to user; stale-while-revalidate=300 serves instantly during updates
+        res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=60, stale-while-revalidate=300');
         return res.status(200).json({ form });
       }
 
-      // Fetch all non-deleted forms
+      // Fetch all non-deleted forms for admin
       const formsResult = await query(
-        `SELECT * FROM forms 
+        `SELECT 
+          id, owner_id, title, slug, description, cover_image_url,
+          event_date, event_end_date, venue, status, registration_deadline,
+          theme_config, presentation_mode, success_message, redirect_url,
+          published_version, created_at, updated_at
+         FROM forms 
          WHERE status != 'deleted' 
          ORDER BY created_at DESC 
          LIMIT 100`
@@ -71,7 +93,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (forms.length > 0) {
         const formIds = forms.map((f: any) => f.id);
         const fieldsResult = await query(
-          `SELECT * FROM form_fields 
+          `SELECT 
+            id, form_id, field_key, label, field_type, description,
+            placeholder, required, default_value, options,
+            validation_rules, conditional_rules, sort_order, configuration
+           FROM form_fields 
            WHERE form_id = ANY($1) 
            ORDER BY sort_order ASC`,
           [formIds]
@@ -88,6 +114,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
       return res.status(200).json({ forms });
     }
 
