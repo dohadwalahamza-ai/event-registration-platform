@@ -62,6 +62,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const id = sub.id || `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const submissionData = sub.submission_data || {};
 
+      // Safety guard against database bloat: enforce strict 150 KB limit on submission payload
+      const payloadString = JSON.stringify(submissionData);
+      if (payloadString.length > 150 * 1024) {
+        return res.status(413).json({
+          error: 'Submission payload exceeds maximum size limit (150 KB). Please ensure uploaded photos are optimized for ID.',
+        });
+      }
+
       // Efficient insert returning only necessary confirmation columns (saving bandwidth during submission peaks)
       const result = await query(
         `INSERT INTO submissions (

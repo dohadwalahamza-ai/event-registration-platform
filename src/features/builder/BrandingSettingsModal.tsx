@@ -16,6 +16,7 @@ import {
 
 import { parseThemeConfig } from '../../services/storage';
 import { RichTextEditor } from '../../generic-ui/components/RichTextEditor';
+import { compressBannerImage } from '../../utils/imageCompressor';
 
 interface BrandingSettingsModalProps {
   isOpen: boolean;
@@ -206,15 +207,21 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
     },
   ];
 
-  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setCoverImageUrl(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      // Compress custom banner to max 1200x400 <= 60 KB to prevent database bloat
+      const compressed = await compressBannerImage(file);
+      setCoverImageUrl(compressed.dataUrl);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCoverImageUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleApply = () => {

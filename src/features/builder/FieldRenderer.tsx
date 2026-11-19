@@ -17,6 +17,7 @@ import {
   MAX_PHOTO_SIZE_BYTES,
   validatePhotoUpload,
   compressImage,
+  compressPhotoForIdentification,
 } from '../../utils/imageCompressor';
 
 interface FieldRendererProps {
@@ -43,6 +44,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       ? value
       : null
   );
+  const [photoOptimizedInfo, setPhotoOptimizedInfo] = useState<{ sizeKB: number; savedPct: number } | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -70,21 +72,21 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
       setIsProcessingPhoto(true);
       try {
-        // Compress client-side to max 1600x1600, 0.82 quality
-        const compressed = await compressImage(file, {
-          maxWidth: 1600,
-          maxHeight: 1600,
-          quality: 0.82,
-        });
+        // Ultra-compact photo optimization for user identification (saving 95%+ database storage)
+        const compressed = await compressPhotoForIdentification(file);
 
-        // Upload to storage service (enforces backend 5MB check)
+        // Upload to storage service (or returns optimized dataUrl)
         const uploadResult = await StorageService.uploadPhoto(
           compressed.blob,
           formId || 'general',
-          file.name
+          compressed.fileName
         );
 
         setPhotoPreview(uploadResult.url);
+        setPhotoOptimizedInfo({
+          sizeKB: Math.max(1, Math.round(compressed.compressedSize / 1024)),
+          savedPct: Math.max(1, Math.round((1 - compressed.compressedSize / compressed.originalSize) * 100)),
+        });
         onChange?.(uploadResult.url);
       } catch (err: any) {
         console.error('Photo optimization/upload failed:', err);
@@ -457,25 +459,34 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                 </span>
               </div>
             ) : photoPreview ? (
-              <div className="relative inline-block border-2 border-indigo-200 rounded-2xl p-1 bg-white shadow-xs">
-                <img
-                  src={photoPreview}
-                  alt="Uploaded preview"
-                  className="w-32 h-32 object-cover rounded-xl"
-                />
-                {!disabled && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPhotoPreview(null);
-                      setUploadError(null);
-                      onChange?.(null);
-                    }}
-                    className="absolute -top-2 -right-2 p-1 bg-rose-600 text-white rounded-full shadow-md hover:bg-rose-700"
-                    title="Remove image"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+              <div className="flex flex-col items-start space-y-2">
+                <div className="relative inline-block border-2 border-indigo-200 rounded-2xl p-1 bg-white shadow-xs">
+                  <img
+                    src={photoPreview}
+                    alt="Uploaded preview"
+                    className="w-32 h-32 object-cover rounded-xl"
+                  />
+                  {!disabled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhotoPreview(null);
+                        setPhotoOptimizedInfo(null);
+                        setUploadError(null);
+                        onChange?.(null);
+                      }}
+                      className="absolute -top-2 -right-2 p-1 bg-rose-600 text-white rounded-full shadow-md hover:bg-rose-700"
+                      title="Remove image"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {photoOptimizedInfo && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 text-[11px] font-semibold rounded-lg border border-emerald-200/80 animate-fade-in">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Optimized for ID: ~{photoOptimizedInfo.sizeKB} KB ({photoOptimizedInfo.savedPct}% smaller)</span>
+                  </div>
                 )}
               </div>
             ) : (
@@ -486,7 +497,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                     Click or drag photo here
                   </span>
                   <span className="text-[11px] text-slate-400 mt-0.5">
-                    JPG, PNG or WebP (Max 5 MB)
+                    JPG, PNG or WebP · Auto-optimized for ID (~20 KB)
                   </span>
                   <input
                     type="file"
